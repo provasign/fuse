@@ -1,0 +1,29 @@
+# Binaries
+/fuse
+/fuse-*
+*.exe
+*.test
+
+# Build output
+/dist/
+/bin/
+
+# Go
+*.o
+*.a
+vendor/
+
+# Tree-sitter CGO artifacts
+*.so
+*.dylib
+
+# Git merge artifacts (test outputs)
+.git/fuse/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
