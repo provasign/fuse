@@ -1,6 +1,6 @@
 module github.com/tabladrum/grove-suite/fuse
 
-go 1.22
+go 1.26
 
 require (
 	github.com/pelletier/go-toml/v2 v2.3.1
