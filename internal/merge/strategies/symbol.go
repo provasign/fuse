@@ -2,6 +2,7 @@ package strategies
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/tabladrum/grove-suite/fuse/internal/core"
 )
@@ -90,6 +91,21 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 				Ours:   deref(oursPtr),
 				Theirs: deref(theirsPtr),
 			})
+			// Emit a synthetic merged entry containing git-style conflict
+			// markers so reconstructFile preserves the symbol's location
+			// instead of silently dropping it. The user (or AI handoff) can
+			// then resolve in-place. We use ours' span/qualified-name so the
+			// substitution lines up with the original ours buffer.
+			confBody := renderConflictMarkers(deref(oursPtr).Body, deref(theirsPtr).Body, deref(basePtr).Body)
+			if oursPtr != nil {
+				marker := *oursPtr
+				marker.Body = confBody
+				merged = append(merged, marker)
+			} else if theirsPtr != nil {
+				marker := *theirsPtr
+				marker.Body = confBody
+				merged = append(merged, marker)
+			}
 			confSum += 0.45
 			confN++
 		}
@@ -176,4 +192,36 @@ func SymbolsToMap(syms []core.SymbolData) map[string]core.SymbolData {
 		out[s.QualifiedName] = s
 	}
 	return out
+}
+
+// renderConflictMarkers produces a git-style conflict block for the body of
+// one symbol. Empty sides are rendered as a placeholder comment so the block
+// remains valid in most languages.
+func renderConflictMarkers(ours, theirs, base string) string {
+	if ours == "" {
+		ours = "// (symbol removed in ours)"
+	}
+	if theirs == "" {
+		theirs = "// (symbol removed in theirs)"
+	}
+	var b strings.Builder
+	b.WriteString("<<<<<<< HEAD\n")
+	b.WriteString(ours)
+	if !strings.HasSuffix(ours, "\n") {
+		b.WriteString("\n")
+	}
+	if base != "" {
+		b.WriteString("||||||| base\n")
+		b.WriteString(base)
+		if !strings.HasSuffix(base, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("=======\n")
+	b.WriteString(theirs)
+	if !strings.HasSuffix(theirs, "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString(">>>>>>> theirs")
+	return b.String()
 }
