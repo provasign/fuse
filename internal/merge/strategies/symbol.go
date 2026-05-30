@@ -9,7 +9,7 @@ import (
 
 // SymbolMergeResult is the output of a symbol-level three-way merge.
 type SymbolMergeResult struct {
-	Merged     []core.SymbolData    // symbols in stable order (ours order preferred)
+	Merged     []core.SymbolData // symbols in stable order (ours order preferred)
 	Conflicts  []core.SymbolConflict
 	Confidence float64
 }
@@ -19,9 +19,9 @@ type SymbolMergeResult struct {
 //
 // Algorithm:
 //
-//   for key in union(base, ours, theirs):
-//     action := ThreeWaySymbol(base[key], ours[key], theirs[key])
-//     keep / take-ours / take-theirs / converged / delete / conflict
+//	for key in union(base, ours, theirs):
+//	  action := ThreeWaySymbol(base[key], ours[key], theirs[key])
+//	  keep / take-ours / take-theirs / converged / delete / conflict
 //
 // Order preservation: symbols present in ours appear in their ours-order
 // first; symbols only-in-theirs are appended; symbols only-in-base that were
