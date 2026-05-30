@@ -290,7 +290,11 @@ func findGitDir(path string) string {
 	if err != nil {
 		return ""
 	}
-	cur := filepath.Dir(abs)
+	// Start from abs itself if it is a directory, otherwise from its parent.
+	cur := abs
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		cur = filepath.Dir(abs)
+	}
 	for {
 		candidate := filepath.Join(cur, ".git")
 		if info, err := os.Stat(candidate); err == nil {
