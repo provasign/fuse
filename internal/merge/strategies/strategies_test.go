@@ -8,7 +8,7 @@ import (
 )
 
 func sym(key, body string, start, end int) core.SymbolData {
-	return core.SymbolData{Key: key, Name: key, Body: body, Span: core.LineRange{Start: start, End: end}}
+	return core.SymbolData{QualifiedName: key, Name: key, Body: body, Span: core.LineRange{Start: start, End: end}}
 }
 
 func TestThreeWayString(t *testing.T) {

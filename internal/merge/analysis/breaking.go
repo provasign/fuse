@@ -80,7 +80,7 @@ func (a *BreakingChangeAnalyzer) Analyze(
 func exportMap(syms []core.SymbolData) map[string]core.SymbolData {
 	out := make(map[string]core.SymbolData)
 	for _, s := range syms {
-		if s.Exported && s.ParentKey == "" {
+		if s.Exported && s.ParentName == "" {
 			out[s.Name] = s
 		}
 	}

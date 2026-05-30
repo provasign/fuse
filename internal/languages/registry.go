@@ -1,28 +1,21 @@
+// Package languages re-exports astkit's strategy/registry types so existing
+// Fuse callers keep compiling. New code should import astkit directly.
 package languages
 
 import (
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/languages/strategies"
+	"github.com/tabladrum/grove-suite/astkit"
+	"github.com/tabladrum/grove-suite/astkit/strategies"
 )
 
-// DefaultRegistry returns a Registry pre-populated with every language Fuse
-// supports for symbol-level merging (Go, TS, TSX, JS, Python, Java, Rust).
-// Config formats (JSON/YAML/TOML) do not need a strategy; they are merged
-// structurally.
-func DefaultRegistry() *Registry {
-	r := NewRegistry()
-	r.Register(strategies.NewGo())
+// Strategy is an alias to astkit.Strategy.
+type Strategy = astkit.Strategy
 
-	ts := strategies.NewTypeScript(false)
-	r.RegisterAs(core.LangTypeScript, ts)
+// Registry is an alias to astkit.Registry.
+type Registry = astkit.Registry
 
-	tsx := strategies.NewTypeScript(true)
-	r.RegisterAs(core.LangTSX, tsx)
+// NewRegistry returns an empty registry.
+func NewRegistry() *Registry { return astkit.NewRegistry() }
 
-	r.RegisterAs(core.LangJavaScript, strategies.NewJavaScript())
-
-	r.Register(strategies.NewPython())
-	r.Register(strategies.NewJava())
-	r.Register(strategies.NewRust())
-	return r
-}
+// DefaultRegistry returns the registry pre-populated with every language Fuse
+// supports for symbol-level merging.
+func DefaultRegistry() *Registry { return strategies.Default() }

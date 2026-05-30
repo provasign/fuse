@@ -1,64 +1,32 @@
 // Package core contains shared data types used across Fuse subpackages.
 package core
 
-// LanguageKey identifies a supported language for the merge pipeline.
-type LanguageKey string
+import "github.com/tabladrum/grove-suite/astkit"
+
+// LanguageKey is re-exported from astkit (shared with Grove).
+type LanguageKey = astkit.LanguageKey
 
 const (
-	LangGo         LanguageKey = "go"
-	LangTypeScript LanguageKey = "typescript"
-	LangTSX        LanguageKey = "tsx"
-	LangJavaScript LanguageKey = "javascript"
-	LangPython     LanguageKey = "python"
-	LangJava       LanguageKey = "java"
-	LangRust       LanguageKey = "rust"
-	LangJSON       LanguageKey = "json"
-	LangYAML       LanguageKey = "yaml"
-	LangTOML       LanguageKey = "toml"
-	LangUnknown    LanguageKey = ""
+	LangGo         = astkit.LangGo
+	LangTypeScript = astkit.LangTypeScript
+	LangTSX        = astkit.LangTSX
+	LangJavaScript = astkit.LangJavaScript
+	LangPython     = astkit.LangPython
+	LangJava       = astkit.LangJava
+	LangRust       = astkit.LangRust
+	LangJSON       = astkit.LangJSON
+	LangYAML       = astkit.LangYAML
+	LangTOML       = astkit.LangTOML
+	LangUnknown    = astkit.LangUnknown
 )
 
-// LineRange is an inclusive 1-indexed source span.
-type LineRange struct {
-	Start int `json:"start"`
-	End   int `json:"end"`
-}
-
-// SymbolData is a symbol extracted for merge purposes (in-memory parse of one
-// version of a file).
-type SymbolData struct {
-	Key       string    `json:"key"`  // unique within file (e.g. "ClassName.methodName")
-	Kind      string    `json:"kind"` // function | method | class | interface | type | const | struct | trait | enum
-	Name      string    `json:"name"`
-	Signature string    `json:"signature"`
-	Body      string    `json:"body"` // full source text of the symbol
-	Span      LineRange `json:"span"`
-	ParentKey string    `json:"parentKey,omitempty"`
-	Modifiers []string  `json:"modifiers,omitempty"`
-	Exported  bool      `json:"exported"`
-}
-
-// ImportStatement is a parsed import line/clause.
-type ImportStatement struct {
-	Raw   string `json:"raw"`  // original source text
-	Path  string `json:"path"` // import path / module / package
-	Alias string `json:"alias,omitempty"`
-	Group string `json:"group,omitempty"` // stdlib | external | relative (best-effort)
-	Line  int    `json:"line"`
-}
-
-// ExportStatement represents a public/export declaration in the file.
-type ExportStatement struct {
-	Name string `json:"name"`
-	Kind string `json:"kind"` // function | class | type | const | default
-}
-
-// MergeCapabilities describes what kinds of merge a language strategy supports.
-type MergeCapabilities struct {
-	SupportsSymbolMerge bool
-	SupportsImportMerge bool
-	SupportsConfigMerge bool
-}
+// LineRange, SymbolData, ImportStatement are re-exported from astkit so that
+// Grove and Fuse share a single source of truth for tree-sitter output.
+type (
+	LineRange       = astkit.LineRange
+	SymbolData      = astkit.Symbol
+	ImportStatement = astkit.ImportStatement
+)
 
 // ConflictType categorizes the nature of a merge conflict.
 type ConflictType string
@@ -97,7 +65,7 @@ const (
 
 // BreakingChange is a detected breaking change during merge.
 type BreakingChange struct {
-	Kind          string           `json:"kind"` // removed_export | signature_changed | broken_import
+	Kind          string           `json:"kind"`
 	Symbol        string           `json:"symbol"`
 	AffectedFiles []string         `json:"affectedFiles,omitempty"`
 	Severity      ConflictSeverity `json:"severity"`

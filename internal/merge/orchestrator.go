@@ -304,19 +304,19 @@ func reconstructFile(
 
 	mergedByKey := make(map[string]core.SymbolData, len(mergedSyms))
 	for _, s := range mergedSyms {
-		mergedByKey[s.Key] = s
+		mergedByKey[s.QualifiedName] = s
 	}
 
 	usedKeys := map[string]bool{}
 	for _, s := range oursSyms {
-		merged, ok := mergedByKey[s.Key]
+		merged, ok := mergedByKey[s.QualifiedName]
 		if !ok {
 			// symbol was dropped in merge
-			spans = append(spans, span{start: s.Span.Start, end: s.Span.End, kind: "skip", key: s.Key})
+			spans = append(spans, span{start: s.Span.Start, end: s.Span.End, kind: "skip", key: s.QualifiedName})
 			continue
 		}
-		spans = append(spans, span{start: s.Span.Start, end: s.Span.End, body: merged.Body, kind: "symbol", key: s.Key})
-		usedKeys[s.Key] = true
+		spans = append(spans, span{start: s.Span.Start, end: s.Span.End, body: merged.Body, kind: "symbol", key: s.QualifiedName})
+		usedKeys[s.QualifiedName] = true
 	}
 	for _, i := range oursImps {
 		spans = append(spans, span{start: i.Line, end: i.Line, kind: "import"})
@@ -362,7 +362,7 @@ func reconstructFile(
 
 	// Append any symbols from merged that ours didn't have (added by theirs).
 	for _, s := range mergedSyms {
-		if usedKeys[s.Key] {
+		if usedKeys[s.QualifiedName] {
 			continue
 		}
 		out = append(out, "")

@@ -173,7 +173,7 @@ func orderedKeys(primary, secondary, tertiary map[string]core.SymbolData) []stri
 func SymbolsToMap(syms []core.SymbolData) map[string]core.SymbolData {
 	out := make(map[string]core.SymbolData, len(syms))
 	for _, s := range syms {
-		out[s.Key] = s
+		out[s.QualifiedName] = s
 	}
 	return out
 }

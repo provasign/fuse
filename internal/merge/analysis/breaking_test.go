@@ -26,9 +26,9 @@ func TestAnalyzeRemovedExport(t *testing.T) {
 		{ID: "2", FilePath: "b.go", Name: "callerB"},
 	}}
 	a := &BreakingChangeAnalyzer{Grove: g}
-	base := []core.SymbolData{{Key: "Foo", Name: "Foo", Exported: true, Signature: "func Foo()"}}
+	base := []core.SymbolData{{QualifiedName: "Foo", Name: "Foo", Exported: true, Signature: "func Foo()"}}
 	ours := []core.SymbolData{}
-	theirs := []core.SymbolData{{Key: "Foo", Name: "Foo", Exported: true, Signature: "func Foo()"}}
+	theirs := []core.SymbolData{{QualifiedName: "Foo", Name: "Foo", Exported: true, Signature: "func Foo()"}}
 	changes := a.Analyze(context.Background(), "x.go", base, ours, theirs)
 	if len(changes) == 0 {
 		t.Fatal("expected breaking change")
@@ -41,9 +41,9 @@ func TestAnalyzeRemovedExport(t *testing.T) {
 func TestAnalyzeSignatureChanged(t *testing.T) {
 	g := &fakeGrove{impact: []grove.ImpactNode{{ID: "1", FilePath: "a.go", Name: "c"}}}
 	a := &BreakingChangeAnalyzer{Grove: g}
-	base := []core.SymbolData{{Key: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x int)"}}
-	ours := []core.SymbolData{{Key: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x string)"}}
-	theirs := []core.SymbolData{{Key: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x float64)"}}
+	base := []core.SymbolData{{QualifiedName: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x int)"}}
+	ours := []core.SymbolData{{QualifiedName: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x string)"}}
+	theirs := []core.SymbolData{{QualifiedName: "Foo", Name: "Foo", Exported: true, Signature: "func Foo(x float64)"}}
 	changes := a.Analyze(context.Background(), "x.go", base, ours, theirs)
 	found := false
 	for _, c := range changes {
