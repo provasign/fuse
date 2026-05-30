@@ -1,5 +1,4 @@
 package languages
-package languages
 
 import (
 	"testing"
