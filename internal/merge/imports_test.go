@@ -1,4 +1,5 @@
 package merge
+package merge
 
 import (
 	"strings"
