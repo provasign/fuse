@@ -168,3 +168,35 @@ Every merge decision is appended to `.git/fuse/audit.json`:
   "symbols_merged": ["Login", "validatePassword"]
 }
 ```
+
+## Quick Start
+
+```bash
+# Build
+make build
+
+# In a Git repo, register fuse as the merge driver
+./bin/fuse install
+
+# Show resolved config
+./bin/fuse config
+
+# Test a three-way merge directly (no Git required)
+./bin/fuse merge base.go ours.go theirs.go path/in/repo.go
+# Exit 0 = clean; Exit 1 = conflict markers written to ours.go
+
+# Start HTTP API
+./bin/fuse serve --port 9999
+curl -X POST http://localhost:9999/merge \
+  -H 'Content-Type: application/json' \
+  -d '{"base":"...","ours":"...","theirs":"...","path":"x.go"}'
+```
+
+## Status
+
+Phase 1 complete: parsing, three-way merge for 7 languages (Go, TypeScript, TSX,
+JavaScript, Python, Java, Rust) plus config merge for JSON/YAML/TOML. Tree-sitter
+backed symbol extraction, LCS-based line fallback, classification, Grove-backed
+breaking change detection, AI handoff prompt generation, audit log.
+
+Run `make test` for the test suite.

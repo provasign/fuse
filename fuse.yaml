@@ -1,0 +1,29 @@
+version: 1
+
+# Where to reach Grove. Defaults are picked up if file is absent.
+grove_url: "http://localhost:7777"
+grove_binary: "grove"
+
+merge:
+  # "static" or "dynamic" — only static is supported in 0.1.
+  confidence_mode: "static"
+  # If post-merge confidence drops below this, emit an AI handoff prompt
+  # instead of taking the auto-merged content.
+  handoff_threshold: 0.30
+  # Detect breaking changes (requires Grove).
+  enable_breaking_change: true
+  # Include Grove-derived dependency context in handoff prompts.
+  enable_context: true
+  # If true, fuse will fail when Grove is unreachable. Set to false to allow
+  # degraded operation (line-level merge + no breaking-change detection).
+  grove_required: true
+
+git:
+  # When true, `fuse install` runs automatically the first time `fuse merge` is
+  # invoked in a repo without registration.
+  auto_install: false
+  # "repo" (write to .gitattributes) or "global" (write to $XDG/git/attributes).
+  attributes_scope: "repo"
+
+server:
+  port: 9999
