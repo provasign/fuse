@@ -119,7 +119,12 @@ func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 //
 // Git invokes us with %O %A %B %P. We MUST write the merged result back to
 // %A (the ours-file). Exit 0 means clean; exit 1 means conflict markers
-// written.
+// written; exit 2 means hard failure (binary, too large, unreadable).
+//
+// Every invocation prints a single-line status to stderr so the user can
+// see what fuse did, even on success:
+//
+//	fuse: <file> [<strategy>] → <result> (confidence=X.XX)
 func cmdMerge(args []string) int {
 	if len(args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: fuse merge <base> <ours> <theirs> [path]")
@@ -134,20 +139,36 @@ func cmdMerge(args []string) int {
 	baseContent, _ := os.ReadFile(basePath)
 	oursContent, err := os.ReadFile(oursPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fuse: cannot read ours %q: %v\n", oursPath, err)
+		fmt.Fprintf(os.Stderr, "fuse: %s → rejected: cannot read ours: %v\n", logicalPath, err)
 		return 2
 	}
 	theirsContent, err := os.ReadFile(theirsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fuse: cannot read theirs %q: %v\n", theirsPath, err)
+		fmt.Fprintf(os.Stderr, "fuse: %s → rejected: cannot read theirs: %v\n", logicalPath, err)
+		return 2
+	}
+
+	// Safety guard 1: refuse binary files. Merging would corrupt them.
+	if isBinary(oursContent) || isBinary(theirsContent) || isBinary(baseContent) {
+		fmt.Fprintf(os.Stderr, "fuse: %s → rejected: binary file (fuse only handles text)\n", logicalPath)
+		return 2
+	}
+
+	// Safety guard 2: refuse very large files. Tree-sitter and our reconstruction
+	// have superlinear behavior beyond this. Git's default driver can still try.
+	const maxFileBytes = 10 * 1024 * 1024 // 10 MB
+	if len(oursContent) > maxFileBytes || len(theirsContent) > maxFileBytes || len(baseContent) > maxFileBytes {
+		fmt.Fprintf(os.Stderr, "fuse: %s → rejected: file exceeds %d bytes\n", logicalPath, maxFileBytes)
 		return 2
 	}
 
 	cfg := loadConfig()
 	lang := parser.DetectLanguage(logicalPath, string(oursContent))
 	if !parser.Supported(lang) {
-		// Defer to git's default driver — write theirs/ours combined via line merge.
-		return runLineMergeAndWrite(oursPath, logicalPath, baseContent, oursContent, theirsContent)
+		// Defer to line-level three-way merge.
+		code := runLineMergeAndWrite(oursPath, logicalPath, baseContent, oursContent, theirsContent)
+		notifyLineResult(logicalPath, code)
+		return code
 	}
 
 	groveClient, gerr := newGrove(cfg, cfg.Merge.GroveRequired && cfg.Merge.EnableBreakingChange)
@@ -203,13 +224,42 @@ func cmdMerge(args []string) int {
 		fmt.Fprintln(os.Stderr, "fuse:", d)
 	}
 	if res.HasConflict || res.Strategy == core.StrategyHandoff {
-		fmt.Fprintf(os.Stderr, "fuse: conflicts in %s (strategy=%s, confidence=%.2f)\n", logicalPath, res.Strategy, res.Confidence)
+		fmt.Fprintf(os.Stderr, "fuse: %s [%s] → conflict (confidence=%.2f)\n", logicalPath, res.Strategy, res.Confidence)
 		if res.PromptFile != "" {
 			fmt.Fprintf(os.Stderr, "fuse: AI prompt: %s\n", res.PromptFile)
 		}
 		return 1
 	}
+	fmt.Fprintf(os.Stderr, "fuse: %s [%s] → auto-merged (confidence=%.2f)\n", logicalPath, res.Strategy, res.Confidence)
 	return 0
+}
+
+// isBinary returns true if data looks like a binary file. Heuristic: any
+// NUL byte in the first 8 KB. Matches git's own binary detection.
+func isBinary(data []byte) bool {
+	limit := len(data)
+	if limit > 8192 {
+		limit = 8192
+	}
+	for i := 0; i < limit; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// notifyLineResult prints a status line for the line-merge fallback path so
+// the user always sees what fuse did, regardless of language support.
+func notifyLineResult(logicalPath string, code int) {
+	switch code {
+	case 0:
+		fmt.Fprintf(os.Stderr, "fuse: %s [line] → auto-merged\n", logicalPath)
+	case 1:
+		fmt.Fprintf(os.Stderr, "fuse: %s [line] → conflict markers written\n", logicalPath)
+	default:
+		fmt.Fprintf(os.Stderr, "fuse: %s [line] → failed (exit %d)\n", logicalPath, code)
+	}
 }
 
 // runLineMergeAndWrite is used for languages we don't support: a pure
