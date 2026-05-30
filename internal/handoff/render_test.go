@@ -3,6 +3,7 @@ package handoff
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -57,6 +58,9 @@ func TestWriteAndRenderMarkdown_Full(t *testing.T) {
 }
 
 func TestWrite_ReadOnlyDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce read-only directory permissions")
+	}
 	dir := filepath.Join(t.TempDir(), "ro")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
