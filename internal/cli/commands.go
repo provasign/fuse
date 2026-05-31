@@ -641,6 +641,12 @@ func cmdServe(args []string) int {
 	if *port != 9999 {
 		cfg.Server.Port = *port
 	}
+	chosen, err := pickPort(cfg.Server.Port)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "port:", err)
+		return 1
+	}
+	cfg.Server.Port = chosen
 	return startServer(cfg)
 }
 

@@ -1,44 +1,52 @@
 # Fuse Roadmap
 
-Fuse is a semantic git merge driver. Requires Grove for cross-file context.
+Fuse is a semantic Git merge driver. MIT licensed. Requires Grove for cross-file context.
 
-## v0.1.0 — Parser & Grove Integration
-_Target: Phase 1–2 of Implementation Plan_
+---
 
-- [ ] Grove client with hard-requirement startup check (same auto-start pattern as Prism)
-- [ ] Tree-sitter parser for in-memory merge: parses base/ours/theirs as strings (distinct from Grove's file-indexing use of Tree-sitter)
-- [ ] Per-language extractors: Go, TypeScript, JavaScript, Python, Java, Rust, plus JSON/YAML/TOML config strategies
-- [ ] Symbol extractor: functions, classes, methods, interfaces, exports, imports per language
+## v0.1.0 — Parser & Grove Integration ✅ shipped
 
-## v0.2.0 — IntelliMerge Pipeline
-_Target: Phase 3–4 of Implementation Plan_
+- [x] Grove client with auto-start logic (same startup contract as Prism)
+- [x] Tree-sitter parser for in-memory merge: parses base/ours/theirs as strings (not files on disk)
+- [x] Per-language extractors: Go, TypeScript, TSX, JavaScript, Python, Java, Rust
+- [x] Config file strategies: JSON, YAML, TOML structural merge
+- [x] Symbol extractor: functions, classes, methods, interfaces, exports, imports per language
 
-- [ ] IntelliMerge 7-phase orchestrator: context building → symbol extraction → recency analysis → graph context → breaking change detection → classification → strategy selection
-- [ ] 5 merge strategies: Symbol (85% confidence), Import (90%), Config (80%), Line (60–70%), Handoff (<30%)
-- [ ] Symbol-level three-way merge algorithm
-- [ ] Import statement merge: union + deduplication + style preservation
-- [ ] Config deep merge: JSON/YAML/TOML structural merge
-- [ ] Breaking change detection: `removed_export`, `signature_changed`, `broken_import` via Grove blast radius
+---
 
-## v0.3.0 — Classification & AI Handoff
-_Target: Phase 5–6 of Implementation Plan_
+## v0.2.0 — IntelliMerge Pipeline ✅ shipped
 
-- [ ] Conflict classification engine: INCREMENTAL / STRUCTURAL / ARCHITECTURAL / CONFIGURATIONAL / COMPLEX
-- [ ] Dynamic confidence model: 5-factor log-odds adjustment (opt-in)
-- [ ] AI handoff prompt generation: writes `.git/fuse/conflict-<sha>.md` with three-way comparison + Grove context
-- [ ] Audit log: `.git/fuse/audit.json` — every merge decision recorded
+- [x] IntelliMerge 7-phase orchestrator: context building → symbol extraction → recency analysis → graph context → breaking change detection → classification → strategy selection
+- [x] 5 merge strategies: Symbol (≥ 85% confidence), Import (≥ 90%), Config (≥ 80%), Line (60–70%), Handoff (< 30%)
+- [x] Symbol-level three-way merge algorithm
+- [x] Import statement merge: union + deduplication + style preservation
+- [x] Config deep merge: JSON/YAML/TOML structural merge
+- [x] Breaking change detection: `removed_export`, `signature_changed`, `broken_import` via Grove blast radius
 
-## v0.4.0 — Git Integration & CLI
-_Target: Phase 7–8 of Implementation Plan_
+---
 
-- [ ] Git merge driver registration: `fuse install` writes `~/.gitconfig` + `.gitattributes`
-- [ ] Git driver interface: reads `%O %A %B %P` args, writes result in-place, exits 0 or 1
-- [ ] CLI: `fuse merge`, `fuse install`, `fuse uninstall`, `fuse status`, `fuse audit`, `fuse config`
-- [ ] Supports all 9 file types: Go, TS, JS, Python, Java, Rust, JSON, YAML, TOML
+## v0.3.0 — Classification & AI Handoff ✅ shipped
 
-## v1.0.0 — Production Ready
+- [x] Conflict classification: INCREMENTAL / STRUCTURAL / ARCHITECTURAL / CONFIGURATIONAL / COMPLEX
+- [x] AI handoff prompt generation: writes `.git/fuse/conflict-<sha>.md` with three-way comparison + Grove context + suggested resolution approach
+- [x] Audit log: `.git/fuse/audit.json` — every merge decision recorded with timestamp, file, class, strategy, confidence, outcome
 
-- [ ] Merge accuracy benchmark: ≥ 85% auto-resolution rate on INCREMENTAL conflicts
-- [ ] 897 tests passing across all language strategies
-- [ ] Single binary distribution: `brew install fuse`, GitHub Releases
-- [ ] Zero external API calls — AI handoff is local prompt generation only
+---
+
+## v0.4.0 — Git Integration & CLI ✅ shipped
+
+- [x] Git merge driver registration: `fuse install` writes `~/.gitconfig`
+- [x] Git driver interface: reads `%O %A %B %P` args, writes result in-place, exits 0 (clean) or 1 (conflict)
+- [x] CLI: `fuse merge`, `fuse install`, `fuse uninstall`, `fuse status`, `fuse audit`, `fuse config`
+- [x] HTTP API: `POST /merge` endpoint at `:9999`
+- [x] 7 source languages + 3 config formats: Go, TS, JS, Python, Java, Rust, C, JSON, YAML, TOML
+
+---
+
+## v1.0.0 — Production Hardening
+
+- [x] Merge accuracy: ≥ 85% auto-resolution rate on INCREMENTAL conflicts
+- [x] Handoff prompt includes Grove blast radius and breaking change analysis
+- [ ] Homebrew tap: `brew install fuse`
+- [ ] `curl | sh` installer for Linux
+- [ ] Published Go module: `github.com/tabladrum/grove-suite/fuse`

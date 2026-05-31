@@ -93,32 +93,9 @@ func (f *fixtureRepo) git(args ...string) string {
 	return string(out)
 }
 
-func (f *fixtureRepo) gitMayFail(args ...string) (string, bool) {
-	c := exec.Command("git", args...)
-	c.Dir = f.dir
-	out, err := c.CombinedOutput()
-	return string(out), err == nil
-}
-
-func (f *fixtureRepo) add(paths ...string) {
-	f.t.Helper()
-	args := append([]string{"add"}, paths...)
-	f.git(args...)
-}
-
 func (f *fixtureRepo) commit(msg string) {
 	f.t.Helper()
 	f.git("commit", "-q", "--allow-empty", "-m", msg)
-}
-
-func (f *fixtureRepo) branch(name string) {
-	f.t.Helper()
-	f.git("checkout", "-q", "-b", name)
-}
-
-func (f *fixtureRepo) checkout(branch string) {
-	f.t.Helper()
-	f.git("checkout", "-q", branch)
 }
 
 // fuseMerge invokes fuse merge by calling Run() directly with the three temp

@@ -34,7 +34,7 @@ func ConfigMerge(lang core.LanguageKey, base, ours, theirs string) ConfigMergeRe
 	if parse == nil || encode == nil {
 		// Fallback to line merge
 		r := LineMerge(base, ours, theirs)
-		return ConfigMergeResult{Merged: r.Merged, HasConflict: r.HasConflict, Confidence: r.Confidence}
+		return ConfigMergeResult(r)
 	}
 
 	baseV, errB := parse(base)
