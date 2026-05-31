@@ -1,18 +1,20 @@
 # Fuse
 
-Fuse is a semantic Git merge driver. It operates at symbol granularity instead of line granularity, resolves the majority of conflicts automatically, and produces AI-ready handoff prompts for the ones it cannot.
+> **Symbol-aware Git merge driver. Auto-resolves the conflicts that shouldn't exist.**
 
-## Why Line-Level Merge Fails
+---
 
-`git merge` operates on lines of text. It cannot distinguish between a line that is part of a function signature and a line that is part of an unrelated comment one hundred lines away. This produces two failure modes:
+You're running multiple AI agents in parallel. Or an agent and your human developers. They all commit to the same files.
 
-1. **False conflicts.** Two developers modified different functions in the same file. Their changes don't interact, but they touched lines close enough together that the diff algorithm declares a conflict. A developer now spends time manually resolving something that should have been automatic.
+Git sees lines. It doesn't know your agent changed `Login()` while your human changed `validatePassword()` in the same file. They're different functions — structurally independent — but they happen to occupy adjacent lines. Git declares a conflict. A developer stops, opens a merge tool, manually resolves something that was never actually conflicting, and goes back to work.
 
-2. **Silent data corruption.** A function was moved to a different file. On the source branch it was deleted from the original location; on the target branch it was modified in place. Line-level merge sees a deletion and a modification to overlapping lines and may silently drop the modification.
+Multiply that by a hundred agent PRs a week.
 
-Fuse parses all three versions of a file (base, ours, theirs) into symbol-level representations, then merges those. Two changes to different symbols are structurally independent even if their source lines are adjacent.
+Fuse replaces git's line-level merge with a symbol-aware one. It parses all three versions of a file with Tree-sitter, extracts symbols, queries Grove for cross-file blast radius, and merges at symbol granularity. Two changes to different symbols never conflict, regardless of where they appear in the file. The ones that are genuinely ambiguous get conflict markers plus an AI-ready handoff prompt — all the context an agent needs to resolve them in one pass.
 
-## Architecture
+---
+
+## How It Works
 
 ```
 git merge <branch>
@@ -44,6 +46,8 @@ fuse merge %O %A %B %P
                                    Exit 1
 ```
 
+---
+
 ## Conflict Classification
 
 Fuse classifies every conflict before choosing a resolution strategy:
@@ -56,6 +60,8 @@ Fuse classifies every conflict before choosing a resolution strategy:
 | `ARCHITECTURAL` | Cross-file interface or API change | Handoff |
 | `COMPLEX` | Interleaved logic changes | Handoff |
 
+---
+
 ## Merge Strategies
 
 | Strategy | Confidence | When used |
@@ -65,6 +71,8 @@ Fuse classifies every conflict before choosing a resolution strategy:
 | Config | ≥ 80% | JSON/YAML/TOML structure merge |
 | Line | 60–70% | Structural changes (fallback) |
 | Handoff | < 30% | Complex/architectural conflicts |
+
+---
 
 ## AI Handoff
 
@@ -77,6 +85,8 @@ When Fuse cannot resolve a conflict confidently, it writes a structured prompt t
 - A suggested resolution approach based on conflict classification
 
 Feed this file to an AI agent to resolve the conflict in context.
+
+---
 
 ## Installation
 
@@ -110,6 +120,8 @@ Per-repository, add `.gitattributes`:
 *.cs   merge=fuse
 ```
 
+---
+
 ## CLI Reference
 
 ```bash
@@ -120,6 +132,8 @@ fuse status [dir]               # show merge driver config and Grove connection
 fuse audit [dir]                # show recent merge decisions
 fuse config [dir]               # show or edit fuse.yaml
 ```
+
+---
 
 ## Configuration
 
@@ -141,17 +155,25 @@ audit_log: true                      # write .git/fuse/audit.json
 
 Environment override: `GROVE_URL`.
 
+---
+
 ## Grove Dependency
 
-Fuse requires a running Grove instance. It checks `$GROVE_URL/health` on startup and auto-starts `grove serve` if unreachable. Grove provides the cross-file blast radius and breaking change detection that make the ARCHITECTURAL and COMPLEX classifications meaningful — without it, Fuse falls back to line-level merge for those cases.
+Fuse requires a running Grove instance. It checks `$GROVE_URL/health` on startup and auto-starts `grove serve` if unreachable. Grove provides the cross-file blast radius and breaking change detection that make the `ARCHITECTURAL` and `COMPLEX` classifications meaningful — without it, Fuse falls back to line-level merge for those cases.
+
+---
 
 ## Tree-sitter Usage
 
 Fuse uses Tree-sitter independently of Grove — it parses the three in-memory merge versions (base, ours, theirs) as strings, not files on disk. This is distinct from Grove's file-on-disk indexing. Fuse needs to parse the same file in three states simultaneously within a single merge invocation; going through Grove's indexer would require writing all three versions to disk and reindexing.
 
+---
+
 ## Language Support
 
 Same languages as Grove's parser: Go, TypeScript, TSX, JavaScript, Python, Java, Rust, C, C++, C#, PHP. Config file formats (JSON, YAML, TOML) use a structural diff instead of Tree-sitter.
+
+---
 
 ## Audit Log
 
@@ -169,13 +191,15 @@ Every merge decision is appended to `.git/fuse/audit.json`:
 }
 ```
 
+---
+
 ## Quick Start
 
 ```bash
 # Build
 make build
 
-# In a Git repo, register fuse as the merge driver
+# Register fuse as the merge driver
 ./bin/fuse install
 
 # Show resolved config
@@ -191,6 +215,8 @@ curl -X POST http://localhost:9999/merge \
   -H 'Content-Type: application/json' \
   -d '{"base":"...","ours":"...","theirs":"...","path":"x.go"}'
 ```
+
+---
 
 ## Status
 
