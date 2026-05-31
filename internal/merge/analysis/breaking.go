@@ -26,9 +26,9 @@ type BreakingChangeAnalyzer struct {
 // Analyze returns the breaking changes introduced by ours and theirs relative
 // to base.
 //
-//   removed_export    : symbol exported in base, absent in (ours OR theirs)
-//   signature_changed : exported symbol present on both sides but signature differs
-//   broken_import     : import present in theirs that resolves to a symbol removed by ours (or vice versa)
+//	removed_export    : symbol exported in base, absent in (ours OR theirs)
+//	signature_changed : exported symbol present on both sides but signature differs
+//	broken_import     : import present in theirs that resolves to a symbol removed by ours (or vice versa)
 //
 // Severity is escalated by the count of affected files from Grove's impact query.
 func (a *BreakingChangeAnalyzer) Analyze(
@@ -43,35 +43,35 @@ func (a *BreakingChangeAnalyzer) Analyze(
 	seen := map[string]bool{}
 	var out []core.BreakingChange
 
-	for name, baseSym := range baseExports {
-		_, inOurs := oursExports[name]
-		_, inTheirs := theirsExports[name]
+	for key, baseSym := range baseExports {
+		_, inOurs := oursExports[key]
+		_, inTheirs := theirsExports[key]
 		if !inOurs || !inTheirs {
-			affected := a.affected(ctx, filePath, name)
+			affected := a.affected(ctx, filePath, baseSym.Name)
 			out = append(out, core.BreakingChange{
 				Kind:          "removed_export",
-				Symbol:        name,
+				Symbol:        key,
 				AffectedFiles: affected,
 				Severity:      severityForCount(len(affected)),
-				Message:       fmt.Sprintf("Export %q removed by %s — may break %d caller(s)", name, removedBy(inOurs, inTheirs), len(affected)),
+				Message:       fmt.Sprintf("Export %q removed by %s — may break %d caller(s)", key, removedBy(inOurs, inTheirs), len(affected)),
 			})
-			seen[name] = true
+			seen[key] = true
 			continue
 		}
 		// Both sides still have it — check signature drift.
-		oursSig := oursExports[name].Signature
-		theirsSig := theirsExports[name].Signature
+		oursSig := oursExports[key].Signature
+		theirsSig := theirsExports[key].Signature
 		baseSig := baseSym.Signature
 		if oursSig != baseSig && theirsSig != baseSig && oursSig != theirsSig {
-			affected := a.affected(ctx, filePath, name)
+			affected := a.affected(ctx, filePath, baseSym.Name)
 			out = append(out, core.BreakingChange{
 				Kind:          "signature_changed",
-				Symbol:        name,
+				Symbol:        key,
 				AffectedFiles: affected,
 				Severity:      severityForCount(len(affected)),
-				Message:       fmt.Sprintf("Signature of %q changed incompatibly on both sides — may break %d caller(s)", name, len(affected)),
+				Message:       fmt.Sprintf("Signature of %q changed incompatibly on both sides — may break %d caller(s)", key, len(affected)),
 			})
-			seen[name] = true
+			seen[key] = true
 		}
 	}
 	return out
@@ -80,11 +80,21 @@ func (a *BreakingChangeAnalyzer) Analyze(
 func exportMap(syms []core.SymbolData) map[string]core.SymbolData {
 	out := make(map[string]core.SymbolData)
 	for _, s := range syms {
-		if s.Exported && s.ParentName == "" {
-			out[s.Name] = s
+		if s.Exported {
+			out[exportKey(s)] = s
 		}
 	}
 	return out
+}
+
+func exportKey(s core.SymbolData) string {
+	if s.QualifiedName != "" && s.QualifiedName != s.Name {
+		return s.QualifiedName
+	}
+	if s.ParentName != "" {
+		return s.ParentName + "." + s.Name
+	}
+	return s.Name
 }
 
 func removedBy(inOurs, inTheirs bool) string {

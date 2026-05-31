@@ -38,6 +38,21 @@ func TestAnalyzeRemovedExport(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRemovedExportedMethod(t *testing.T) {
+	g := &fakeGrove{impact: []grove.ImpactNode{{ID: "1", FilePath: "invoice_test.go", Name: "TestRiskBand"}}}
+	a := &BreakingChangeAnalyzer{Grove: g}
+	base := []core.SymbolData{{QualifiedName: "RiskBand", ParentName: "Invoice", Name: "RiskBand", Exported: true, Signature: "func (invoice Invoice) RiskBand() string"}}
+	ours := []core.SymbolData{{QualifiedName: "riskBand", ParentName: "Invoice", Name: "riskBand", Exported: false, Signature: "func (invoice Invoice) riskBand() string"}}
+	theirs := ours
+	changes := a.Analyze(context.Background(), "invoice.go", base, ours, theirs)
+	if len(changes) == 0 {
+		t.Fatal("expected exported method removal")
+	}
+	if changes[0].Symbol != "Invoice.RiskBand" {
+		t.Fatalf("symbol = %q, want Invoice.RiskBand", changes[0].Symbol)
+	}
+}
+
 func TestAnalyzeSignatureChanged(t *testing.T) {
 	g := &fakeGrove{impact: []grove.ImpactNode{{ID: "1", FilePath: "a.go", Name: "c"}}}
 	a := &BreakingChangeAnalyzer{Grove: g}
