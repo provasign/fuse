@@ -97,9 +97,15 @@ func loadConfig() *config.Config {
 
 // newGrove builds the Grove client (and optionally ensures Grove is running).
 // Returns (nil, nil) if Grove is configured as not-required and unreachable.
+//
+// The client picks up the local laptop-mode bearer token from
+// <cwd>/.grove/.token if present, so authenticated Grove daemons accept
+// our /deps and /impact calls. Missing token is non-fatal for
+// development setups where Grove auth is disabled.
 func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
+	cwd, _ := os.Getwd()
 	if !required {
-		c := grove.New(cfg.GroveURL)
+		c := grove.New(cfg.GroveURL).WithTokenFromDir(cwd)
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 		if err := c.Health(ctx); err != nil {
@@ -112,7 +118,7 @@ func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 	if err := grove.EnsureRunning(ctx, cfg.GroveURL, cfg.GroveBinary, 10*time.Second); err != nil {
 		return nil, err
 	}
-	return grove.New(cfg.GroveURL), nil
+	return grove.New(cfg.GroveURL).WithTokenFromDir(cwd), nil
 }
 
 // cmdMerge implements `fuse merge <base> <ours> <theirs> [path]`.

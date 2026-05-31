@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -17,6 +20,12 @@ import (
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	// Token is the bearer token Grove enforces on /api/* routes when it
+	// runs in laptop mode (token written by grove serve to .grove/.token,
+	// mode 0600). An empty token means no Authorization header is sent —
+	// fine for unauthenticated Grove builds, rejected with 401 by the
+	// laptop daemon.
+	Token string
 }
 
 // New returns a Client targeting baseURL with a sensible default timeout.
@@ -27,7 +36,20 @@ func New(baseURL string) *Client {
 	}
 }
 
-// Health pings Grove's /health endpoint.
+// WithTokenFromDir loads the bearer token from <dir>/.grove/.token and
+// attaches it to subsequent requests. Returns the same client for
+// chaining; missing token file is non-fatal (silent no-op) because some
+// Grove deployments don't require auth.
+func (c *Client) WithTokenFromDir(dir string) *Client {
+	data, err := os.ReadFile(filepath.Join(dir, ".grove", ".token"))
+	if err == nil {
+		c.Token = strings.TrimSpace(string(data))
+	}
+	return c
+}
+
+// Health pings Grove's /health endpoint. The health route is unauthenticated
+// by design (used for startup probes), so no token header is sent.
 func (c *Client) Health(ctx context.Context) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/health", nil)
 	resp, err := c.HTTP.Do(req)
@@ -39,6 +61,14 @@ func (c *Client) Health(ctx context.Context) error {
 		return fmt.Errorf("grove health: %s", resp.Status)
 	}
 	return nil
+}
+
+// addAuth attaches the bearer token to req if one is configured. Centralised
+// so every authenticated endpoint goes through the same code path.
+func (c *Client) addAuth(req *http.Request) {
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 }
 
 // Edge mirrors grove core.Edge for the wire.
@@ -118,6 +148,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.addAuth(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return err
