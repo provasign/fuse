@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -76,7 +77,7 @@ Commands:
   fuse status                                Show last audit stats
   fuse resolve <conflict-file>               Print AI handoff prompt
   fuse check <file>                          Detect breaking changes for current file (vs HEAD)
-  fuse impact <file>                         Show blast radius via Grove
+  fuse impact <file-or-symbol>               Show blast radius via Grove
   fuse deps <file>                           Show dependencies via Grove
   fuse config                                Print resolved configuration
   fuse serve [--port 9999]                   Start HTTP API
@@ -460,42 +461,150 @@ func cmdCheck(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: fuse check <file>")
 		return 2
 	}
-	cfg := loadConfig()
-	groveClient, gerr := newGrove(cfg, true)
-	if gerr != nil {
-		fmt.Fprintf(os.Stderr, "fuse check: Grove required: %v\n", gerr)
-		return 2
-	}
-	deps, err := groveClient.Deps(context.Background(), args[0])
+	filePath := args[0]
+
+	workingContent, err := os.ReadFile(filePath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "fuse check: cannot read %s: %v\n", filePath, err)
 		return 2
 	}
-	for _, e := range deps {
-		fmt.Printf("%s -%s-> %s (conf=%.2f)\n", e.From, e.Type, e.To, e.Confidence)
+
+	// Get the HEAD blob for the same path. If the file is new (no HEAD blob),
+	// every exported symbol is "added" — there is nothing to break, so we
+	// report a clean result and exit 0.
+	headContent, headErr := gitShowHead(filePath)
+	if headErr != nil {
+		fmt.Printf("fuse check: %s is not tracked at HEAD (new file) — nothing to break\n", filePath)
+		return 0
 	}
-	return 0
+
+	lang := parser.DetectLanguage(filePath, string(workingContent))
+	if !parser.IsAST(lang) {
+		fmt.Printf("fuse check: %s language %q is not AST-parseable; skipping breaking-change scan\n", filePath, lang)
+		return 0
+	}
+
+	im := merge.New(nil)
+	strategy := im.Registry.Get(lang)
+	if strategy == nil {
+		fmt.Printf("fuse check: no strategy for language %q\n", lang)
+		return 0
+	}
+
+	headTree, hErr := im.Parser.Parse(lang, headContent)
+	workTree, wErr := im.Parser.Parse(lang, workingContent)
+	defer func() {
+		if headTree != nil {
+			headTree.Close()
+		}
+		if workTree != nil {
+			workTree.Close()
+		}
+	}()
+	if hErr != nil || wErr != nil {
+		fmt.Fprintf(os.Stderr, "fuse check: parse failed (head=%v, work=%v)\n", hErr, wErr)
+		return 2
+	}
+
+	baseSyms, _ := strategy.Extract(headTree, headContent)
+	workSyms, _ := strategy.Extract(workTree, workingContent)
+
+	cfg := loadConfig()
+	groveClient, _ := newGrove(cfg, false) // optional — analyzer falls back gracefully when nil
+	analyzer := &analysis.BreakingChangeAnalyzer{Grove: groveClient}
+	// 2-way diff modelled as 3-way with ours==theirs so only removed/added
+	// signal fires (signature drift requires both sides to differ from base).
+	changes := analyzer.Analyze(context.Background(), filePath, baseSyms, workSyms, workSyms)
+
+	if len(changes) == 0 {
+		fmt.Printf("fuse check: %s — no breaking changes vs HEAD\n", filePath)
+		return 0
+	}
+	fmt.Printf("fuse check: %s — %d breaking change(s) vs HEAD\n", filePath, len(changes))
+	for _, c := range changes {
+		fmt.Printf("  [%s] %s: %s\n", c.Severity, c.Kind, c.Message)
+		for _, f := range c.AffectedFiles {
+			fmt.Printf("    affects %s\n", f)
+		}
+	}
+	return 1
+}
+
+// gitShowHead returns the HEAD blob contents for filePath (relative to repo
+// root) or an error if the file isn't tracked or git fails.
+func gitShowHead(filePath string) ([]byte, error) {
+	c := exec.Command("git", "show", "HEAD:"+filePath)
+	out, err := c.Output()
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func cmdImpact(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: fuse impact <file>")
+		fmt.Fprintln(os.Stderr, "usage: fuse impact <file-or-symbol>")
 		return 2
 	}
+	query := args[0]
 	cfg := loadConfig()
 	groveClient, gerr := newGrove(cfg, true)
 	if gerr != nil {
+		fmt.Fprintf(os.Stderr, "fuse impact: Grove required: %v\n", gerr)
 		return 2
 	}
-	nodes, err := groveClient.Impact(context.Background(), args[0], 3)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 2
+
+	ctx := context.Background()
+	queries := []string{query}
+	// If the arg looks like an existing file, expand to the symbols defined
+	// in that file via /deps and call /impact for each. Without this the
+	// command silently returns nothing for the common `fuse impact <file>`
+	// invocation that the help text advertises.
+	if _, err := os.Stat(query); err == nil {
+		edges, derr := groveClient.Deps(ctx, query)
+		if derr != nil {
+			fmt.Fprintf(os.Stderr, "fuse impact: deps lookup failed: %v\n", derr)
+			return 2
+		}
+		var syms []string
+		for _, e := range edges {
+			if e.Type == "defines" {
+				syms = append(syms, e.To)
+			}
+		}
+		if len(syms) > 0 {
+			queries = syms
+		}
 	}
-	for _, n := range nodes {
+
+	seen := map[string]bool{}
+	var all []groveImpactRow
+	for _, q := range queries {
+		nodes, err := groveClient.Impact(ctx, q, 3)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fuse impact: %v\n", err)
+			return 2
+		}
+		for _, n := range nodes {
+			if seen[n.ID] {
+				continue
+			}
+			seen[n.ID] = true
+			all = append(all, groveImpactRow{ID: n.ID, FilePath: n.FilePath, Name: n.Name})
+		}
+	}
+	if len(all) == 0 {
+		fmt.Printf("fuse impact: no downstream impact found for %q\n", query)
+		return 0
+	}
+	for _, n := range all {
 		fmt.Printf("%s  %s  %s\n", n.ID, n.FilePath, n.Name)
 	}
 	return 0
+}
+
+type groveImpactRow struct {
+	ID, FilePath, Name string
 }
 
 func cmdDeps(args []string) int {
@@ -506,12 +615,17 @@ func cmdDeps(args []string) int {
 	cfg := loadConfig()
 	groveClient, gerr := newGrove(cfg, true)
 	if gerr != nil {
+		fmt.Fprintf(os.Stderr, "fuse deps: Grove required: %v\n", gerr)
 		return 2
 	}
 	edges, err := groveClient.Deps(context.Background(), args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
+	}
+	if len(edges) == 0 {
+		fmt.Printf("fuse deps: no edges recorded for %s (run `grove index .` first?)\n", args[0])
+		return 0
 	}
 	for _, e := range edges {
 		fmt.Printf("%s -%s-> %s\n", e.From, e.Type, e.To)

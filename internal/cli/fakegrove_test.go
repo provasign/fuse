@@ -57,6 +57,14 @@ func TestCmdCheckImpactDeps_AgainstFakeGrove(t *testing.T) {
 	t.Setenv("FUSE_GROVE_REQUIRED", "false")
 	withDir(t, resolved)
 
+	// cmdCheck now reads the working-tree file to detect breaking changes
+	// vs HEAD, so x.go must exist on disk. Without a HEAD blob (no commit
+	// yet) it reports the file as new and exits 0 — exactly the smoke-test
+	// signal this test wants.
+	if err := os.WriteFile(filepath.Join(resolved, "x.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, cmd := range []string{"check", "impact", "deps"} {
 		if code := Run([]string{cmd, "x.go"}); code != 0 {
 			t.Errorf("%s returned %d", cmd, code)
