@@ -23,7 +23,7 @@ func TestPost_NilOut(t *testing.T) {
 // once before timing out.
 func TestEnsureRunning_BinaryStartsButHealthNeverOK(t *testing.T) {
 	if err := EnsureRunning(context.Background(), "http://127.0.0.1:1",
-		"/bin/true", 300*time.Millisecond); err == nil {
+		"/bin/true", "", 300*time.Millisecond); err == nil {
 		t.Error("expected timeout error")
 	}
 }

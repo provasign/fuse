@@ -72,14 +72,14 @@ func TestEnsureRunning_AlreadyHealthy(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer srv.Close()
-	if err := EnsureRunning(context.Background(), srv.URL, "/usr/bin/false", time.Second); err != nil {
+	if err := EnsureRunning(context.Background(), srv.URL, "/usr/bin/false", "", time.Second); err != nil {
 		t.Errorf("already-healthy: %v", err)
 	}
 }
 
 func TestEnsureRunning_BinaryMissing(t *testing.T) {
 	if err := EnsureRunning(context.Background(), "http://127.0.0.1:1",
-		"/no/such/binary/grove-xyz", 200*time.Millisecond); err == nil {
+		"/no/such/binary/grove-xyz", "", 200*time.Millisecond); err == nil {
 		t.Error("expected error")
 	}
 }

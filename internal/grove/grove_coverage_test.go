@@ -126,7 +126,7 @@ func TestEnsureRunning_AlreadyHealthy(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer srv.Close()
-	err := grove.EnsureRunning(context.Background(), srv.URL, "nonexistent-grove-binary", 2*time.Second)
+	err := grove.EnsureRunning(context.Background(), srv.URL, "nonexistent-grove-binary", "", 2*time.Second)
 	if err != nil {
 		t.Errorf("expected nil error when grove is healthy; got: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestEnsureRunning_BinaryNotFound(t *testing.T) {
 	_ = ln.Close()
 
 	baseURL := "http://127.0.0.1:" + itoa(port)
-	err = grove.EnsureRunning(context.Background(), baseURL, "/nonexistent/path/grove-binary-xyz", 500*time.Millisecond)
+	err = grove.EnsureRunning(context.Background(), baseURL, "/nonexistent/path/grove-binary-xyz", "", 500*time.Millisecond)
 	if err == nil {
 		t.Error("expected error when binary doesn't exist")
 	}
@@ -163,7 +163,7 @@ func TestEnsureRunning_Timeout(t *testing.T) {
 
 	baseURL := "http://127.0.0.1:" + itoa(port)
 	// Use /bin/echo as binary — it starts but doesn't serve HTTP.
-	err = grove.EnsureRunning(context.Background(), baseURL, "/bin/echo", 300*time.Millisecond)
+	err = grove.EnsureRunning(context.Background(), baseURL, "/bin/echo", "", 300*time.Millisecond)
 	if err == nil {
 		t.Error("expected timeout error")
 	}

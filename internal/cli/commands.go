@@ -116,7 +116,7 @@ func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := grove.EnsureRunning(ctx, cfg.GroveURL, cfg.GroveBinary, 10*time.Second); err != nil {
+	if err := grove.EnsureRunning(ctx, cfg.GroveURL, cfg.GroveBinary, cwd, 10*time.Second); err != nil {
 		return nil, err
 	}
 	return grove.New(cfg.GroveURL).WithTokenFromDir(cwd), nil

@@ -165,15 +165,22 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 }
 
 // EnsureRunning checks /health and, if unreachable, attempts to start the
-// grove binary in the background. Returns nil if Grove is healthy within
-// timeout, error otherwise.
-func EnsureRunning(ctx context.Context, baseURL, binary string, timeout time.Duration) error {
+// grove binary in the background. root is the project directory; it is passed
+// to `grove serve` so the token file lands in <root>/.grove/.token rather than
+// in whatever working directory is current when the child process spawns.
+// Returns nil if Grove is healthy within timeout, error otherwise.
+func EnsureRunning(ctx context.Context, baseURL, binary, root string, timeout time.Duration) error {
 	c := New(baseURL)
 	if err := c.Health(ctx); err == nil {
 		return nil
 	}
 	// Attempt to spawn the binary.
-	cmd := exec.Command(binary, "serve", "--port", "7777")
+	port := portFromURL(baseURL)
+	args := []string{"serve", "--port", port}
+	if root != "" {
+		args = append(args, root)
+	}
+	cmd := exec.Command(binary, args...)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("grove not reachable and failed to start %s: %w", binary, err)
 	}
@@ -185,4 +192,19 @@ func EnsureRunning(ctx context.Context, baseURL, binary string, timeout time.Dur
 		time.Sleep(200 * time.Millisecond)
 	}
 	return fmt.Errorf("grove not reachable at %s after %s", baseURL, timeout)
+}
+
+func portFromURL(u string) string {
+	// Extract port from "http://host:port" URL.
+	if i := strings.LastIndex(u, ":"); i >= 0 {
+		p := u[i+1:]
+		// Strip any trailing path.
+		if j := strings.IndexByte(p, '/'); j >= 0 {
+			p = p[:j]
+		}
+		if p != "" {
+			return p
+		}
+	}
+	return "7777"
 }
