@@ -122,6 +122,15 @@ func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 	return grove.New(cfg.GroveURL).WithTokenFromDir(cwd), nil
 }
 
+func closeGroveClient(c analysis.GroveLike) {
+	if c == nil {
+		return
+	}
+	if closer, ok := c.(interface{ Close() }); ok {
+		closer.Close()
+	}
+}
+
 // cmdMerge implements `fuse merge <base> <ours> <theirs> [path]`.
 //
 // Git invokes us with %O %A %B %P. We MUST write the merged result back to
@@ -179,6 +188,7 @@ func cmdMerge(args []string) int {
 	}
 
 	groveClient, gerr := newGrove(cfg, cfg.Merge.GroveRequired && cfg.Merge.EnableBreakingChange)
+	defer closeGroveClient(groveClient)
 	if gerr != nil && cfg.Merge.GroveRequired {
 		fmt.Fprintf(os.Stderr, "fuse: Grove is required but not reachable: %v\n", gerr)
 		return 2
@@ -342,6 +352,7 @@ func cmdPreview(args []string) int {
 	}
 	cfg := loadConfig()
 	groveClient, _ := newGrove(cfg, false)
+	defer closeGroveClient(groveClient)
 	im := merge.New(groveClient)
 	im.EnableBreaking = false
 	im.EnableContext = false
@@ -511,6 +522,7 @@ func cmdCheck(args []string) int {
 
 	cfg := loadConfig()
 	groveClient, _ := newGrove(cfg, false) // optional — analyzer falls back gracefully when nil
+	defer closeGroveClient(groveClient)
 	analyzer := &analysis.BreakingChangeAnalyzer{Grove: groveClient}
 	// 2-way diff modelled as 3-way with ours==theirs so only removed/added
 	// signal fires (signature drift requires both sides to differ from base).
@@ -549,6 +561,7 @@ func cmdImpact(args []string) int {
 	query := args[0]
 	cfg := loadConfig()
 	groveClient, gerr := newGrove(cfg, true)
+	defer closeGroveClient(groveClient)
 	if gerr != nil {
 		fmt.Fprintf(os.Stderr, "fuse impact: Grove required: %v\n", gerr)
 		return 2
@@ -614,6 +627,7 @@ func cmdDeps(args []string) int {
 	}
 	cfg := loadConfig()
 	groveClient, gerr := newGrove(cfg, true)
+	defer closeGroveClient(groveClient)
 	if gerr != nil {
 		fmt.Fprintf(os.Stderr, "fuse deps: Grove required: %v\n", gerr)
 		return 2

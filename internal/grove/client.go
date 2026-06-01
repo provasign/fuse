@@ -175,5 +175,6 @@ func EnsureRunning(ctx context.Context, baseURL, binary, root string, timeout ti
 		return errors.New("grove EnsureRunning: root is required (embedded mode)")
 	}
 	c := New(baseURL).WithTokenFromDir(root)
+	defer c.Close()
 	return c.Health(ctx)
 }
