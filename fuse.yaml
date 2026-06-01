@@ -1,8 +1,6 @@
 version: 1
 
-# Where to reach Grove. Defaults are picked up if file is absent.
-grove_url: "http://localhost:7777"
-grove_binary: "grove"
+# Grove is now an embedded library — no grove_url / grove_binary needed.
 
 merge:
   # "static" or "dynamic" — only static is supported in 0.1.

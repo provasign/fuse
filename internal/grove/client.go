@@ -1,77 +1,22 @@
-// Package grove is a small HTTP client for the Grove graph engine. Fuse uses
-// Grove for cross-file blast radius and breaking change detection.
+// Package grove is Fuse's adapter to the in-process Grove engine. The previous
+// HTTP client + auto-spawn of `grove serve` is gone: Fuse now links against
+// `grove/pkg/grove` and opens the on-disk index directly. Public types
+// (Client, Edge, ImpactNode, SymbolRecord, EnsureRunning) are preserved so the
+// rest of Fuse compiles unchanged.
 package grove
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
+
+	groveeng "github.com/tabladrum/grove-suite/grove/pkg/grove"
 )
 
-// Client speaks JSON to a running Grove instance over HTTP.
-type Client struct {
-	BaseURL string
-	HTTP    *http.Client
-	// Token is the bearer token Grove enforces on /api/* routes when it
-	// runs in laptop mode (token written by grove serve to .grove/.token,
-	// mode 0600). An empty token means no Authorization header is sent —
-	// fine for unauthenticated Grove builds, rejected with 401 by the
-	// laptop daemon.
-	Token string
-}
-
-// New returns a Client targeting baseURL with a sensible default timeout.
-func New(baseURL string) *Client {
-	return &Client{
-		BaseURL: baseURL,
-		HTTP:    &http.Client{Timeout: 10 * time.Second},
-	}
-}
-
-// WithTokenFromDir loads the bearer token from <dir>/.grove/.token and
-// attaches it to subsequent requests. Returns the same client for
-// chaining; missing token file is non-fatal (silent no-op) because some
-// Grove deployments don't require auth.
-func (c *Client) WithTokenFromDir(dir string) *Client {
-	data, err := os.ReadFile(filepath.Join(dir, ".grove", ".token"))
-	if err == nil {
-		c.Token = strings.TrimSpace(string(data))
-	}
-	return c
-}
-
-// Health pings Grove's /health endpoint. The health route is unauthenticated
-// by design (used for startup probes), so no token header is sent.
-func (c *Client) Health(ctx context.Context) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/health", nil)
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("grove health: %s", resp.Status)
-	}
-	return nil
-}
-
-// addAuth attaches the bearer token to req if one is configured. Centralised
-// so every authenticated endpoint goes through the same code path.
-func (c *Client) addAuth(req *http.Request) {
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-}
-
-// Edge mirrors grove core.Edge for the wire.
+// Edge mirrors the engine edge shape Fuse consumes.
 type Edge struct {
 	From       string  `json:"from"`
 	To         string  `json:"to"`
@@ -79,14 +24,14 @@ type Edge struct {
 	Confidence float64 `json:"confidence"`
 }
 
-// ImpactNode is a single entry in the impact response.
+// ImpactNode is one entry in the blast-radius response.
 type ImpactNode struct {
 	ID       string `json:"id"`
 	FilePath string `json:"filePath"`
 	Name     string `json:"name"`
 }
 
-// SymbolRecord mirrors grove core.SymbolRecord for the wire (lossy).
+// SymbolRecord is the wire-format subset Fuse uses.
 type SymbolRecord struct {
 	ID       string `json:"id"`
 	FilePath string `json:"filePath"`
@@ -94,29 +39,102 @@ type SymbolRecord struct {
 	Kind     string `json:"kind"`
 }
 
-// Deps returns the edges declared from filePath (imports, calls, etc.).
-func (c *Client) Deps(ctx context.Context, filePath string) ([]Edge, error) {
-	var resp struct {
-		Edges []Edge `json:"edges"`
-	}
-	if err := c.post(ctx, "/deps", map[string]any{"file": filePath}, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Edges, nil
+// Client wraps an embedded Grove engine. BaseURL/Token are accepted for API
+// compatibility but unused.
+type Client struct {
+	BaseURL string
+	Token   string
+
+	root string
+
+	mu  sync.Mutex
+	eng *groveeng.Engine
 }
 
-// Impact returns nodes affected by changes to query (file path or symbol).
+// New returns a Client. baseURL is retained for compatibility and ignored.
+func New(baseURL string) *Client {
+	return &Client{BaseURL: baseURL}
+}
+
+// WithTokenFromDir records the project root so Fuse can open the engine at
+// <dir>/.grove/grove.db on first use. No token is read (none exists).
+func (c *Client) WithTokenFromDir(dir string) *Client {
+	if abs, err := filepath.Abs(dir); err == nil {
+		c.root = abs
+	} else {
+		c.root = dir
+	}
+	return c
+}
+
+// Health returns nil if the engine is open (or can be opened lazily).
+func (c *Client) Health(ctx context.Context) error {
+	_, err := c.ensure(ctx)
+	return err
+}
+
+func (c *Client) ensure(ctx context.Context) (*groveeng.Engine, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.eng != nil {
+		return c.eng, nil
+	}
+	if c.root == "" {
+		return nil, errors.New("grove: WithTokenFromDir(dir) must be called before use")
+	}
+	eng, err := groveeng.Open(ctx, groveeng.Config{RepoRoot: c.root})
+	if err != nil {
+		return nil, fmt.Errorf("grove open: %w", err)
+	}
+	c.eng = eng
+	return eng, nil
+}
+
+// Close releases the engine.
+func (c *Client) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.eng != nil {
+		_ = c.eng.Close()
+		c.eng = nil
+	}
+}
+
+// Deps returns dependency edges for filePath.
+func (c *Client) Deps(ctx context.Context, filePath string) ([]Edge, error) {
+	e, err := c.ensure(ctx)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := e.Deps(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Edge, 0, len(raw))
+	for _, ed := range raw {
+		out = append(out, Edge{From: ed.From, To: ed.To, Type: string(ed.Type), Confidence: ed.Confidence})
+	}
+	return out, nil
+}
+
+// Impact returns nodes affected by changes to query (file or symbol).
 func (c *Client) Impact(ctx context.Context, query string, maxDepth int) ([]ImpactNode, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
 	}
-	var resp struct {
-		Nodes []ImpactNode `json:"nodes"`
-	}
-	if err := c.post(ctx, "/impact", map[string]any{"query": query, "maxDepth": maxDepth}, &resp); err != nil {
+	e, err := c.ensure(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return resp.Nodes, nil
+	syms, err := e.Impact(ctx, query, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ImpactNode, 0, len(syms))
+	for _, s := range syms {
+		out = append(out, ImpactNode{ID: s.ID, FilePath: s.FilePath, Name: s.Name})
+	}
+	return out, nil
 }
 
 // Symbols searches symbols by query string.
@@ -124,87 +142,38 @@ func (c *Client) Symbols(ctx context.Context, query string, limit int) ([]Symbol
 	if limit <= 0 {
 		limit = 50
 	}
-	var resp struct {
-		Symbols []SymbolRecord `json:"symbols"`
-	}
-	if err := c.post(ctx, "/symbols", map[string]any{"query": query, "limit": limit}, &resp); err != nil {
+	e, err := c.ensure(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return resp.Symbols, nil
+	syms, err := e.Symbols(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SymbolRecord, 0, len(syms))
+	for _, s := range syms {
+		out = append(out, SymbolRecord{ID: s.ID, FilePath: s.FilePath, Name: s.Name, Kind: string(s.Kind)})
+	}
+	return out, nil
 }
 
 // Index triggers (re-)indexing of dir.
 func (c *Client) Index(ctx context.Context, dir string) error {
-	return c.post(ctx, "/index", map[string]any{"dir": dir}, &struct{}{})
+	e, err := c.ensure(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = e.Index(ctx, dir)
+	return err
 }
 
-func (c *Client) post(ctx context.Context, path string, body, out any) error {
-	data, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	c.addAuth(req)
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("grove %s: %s: %s", path, resp.Status, string(b))
-	}
-	if out == nil {
-		return nil
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
-}
-
-// EnsureRunning checks /health and, if unreachable, attempts to start the
-// grove binary in the background. root is the project directory; it is passed
-// to `grove serve` so the token file lands in <root>/.grove/.token rather than
-// in whatever working directory is current when the child process spawns.
-// Returns nil if Grove is healthy within timeout, error otherwise.
+// EnsureRunning is a no-op in the embedded model — Grove is in-process. Kept
+// for API compatibility; baseURL/binary/timeout are ignored. root is required
+// so we know which repository's .grove/ to attach to.
 func EnsureRunning(ctx context.Context, baseURL, binary, root string, timeout time.Duration) error {
-	c := New(baseURL)
-	if err := c.Health(ctx); err == nil {
-		return nil
+	if root == "" {
+		return errors.New("grove EnsureRunning: root is required (embedded mode)")
 	}
-	// Attempt to spawn the binary.
-	port := portFromURL(baseURL)
-	args := []string{"serve", "--port", port}
-	if root != "" {
-		args = append(args, root)
-	}
-	cmd := exec.Command(binary, args...)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("grove not reachable and failed to start %s: %w", binary, err)
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if err := c.Health(ctx); err == nil {
-			return nil
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	return fmt.Errorf("grove not reachable at %s after %s", baseURL, timeout)
-}
-
-func portFromURL(u string) string {
-	// Extract port from "http://host:port" URL.
-	if i := strings.LastIndex(u, ":"); i >= 0 {
-		p := u[i+1:]
-		// Strip any trailing path.
-		if j := strings.IndexByte(p, '/'); j >= 0 {
-			p = p[:j]
-		}
-		if p != "" {
-			return p
-		}
-	}
-	return "7777"
+	c := New(baseURL).WithTokenFromDir(root)
+	return c.Health(ctx)
 }

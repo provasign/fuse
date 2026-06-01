@@ -2,6 +2,8 @@
 
 > **Symbol-aware Git merge driver. Auto-resolves the conflicts that shouldn't exist.**
 
+> **Embedded Grove:** Fuse now links Grove directly and opens the on-disk index in-process. No `grove serve` daemon, no `grove_url`, no token — if old docs mention them, you're on a pre-embedded build.
+
 ---
 
 You're running multiple AI agents in parallel. Or an agent and your human developers. They all commit to the same files.

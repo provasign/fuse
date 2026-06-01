@@ -182,34 +182,6 @@ func TestMergeFailure_BothSidesDeletedSymbol(t *testing.T) {
 	}
 }
 
-func TestMergeFailure_GroveRequiredButMissing(t *testing.T) {
-	// When grove_required=true and grove is unreachable → exit 2.
-	dir := t.TempDir()
-	base := []byte("package x\n\nfunc A() {}\n")
-	bp, op, tp := writeTriple(t, dir, "f.go", base, base, base)
-	t.Setenv("FUSE_GROVE_REQUIRED", "true")
-	t.Setenv("GROVE_URL", "http://127.0.0.1:1") // unreachable
-
-	// Write a fuse.yaml that turns on breaking-change requiring grove.
-	cfgPath := filepath.Join(dir, "fuse.yaml")
-	_ = os.WriteFile(cfgPath, []byte("merge:\n  grove_required: true\n  enable_breaking_change: true\n"), 0o644)
-
-	wd, _ := os.Getwd()
-	defer func() { _ = os.Chdir(wd) }()
-	_ = os.Chdir(dir)
-
-	var code int
-	stderr := captureStderr(t, func() {
-		code = Run([]string{"merge", bp, op, tp, "f.go"})
-	})
-	if code != 2 {
-		t.Errorf("grove-required missing: exit=%d, want 2; stderr=%s", code, stderr)
-	}
-	if !strings.Contains(stderr, "Grove is required") && !strings.Contains(stderr, "grove") {
-		t.Errorf("expected grove error; stderr=%q", stderr)
-	}
-}
-
 // ── Complex conflict scenarios ─────────────────────────────────────────────
 
 func TestComplexMerge_MultiSymbolConflict(t *testing.T) {
