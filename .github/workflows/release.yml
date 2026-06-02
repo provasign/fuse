@@ -30,7 +30,7 @@ jobs:
           CC: ${{ matrix.goarch == 'arm64' && 'aarch64-linux-gnu-gcc' || 'gcc' }}
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w" -o "dist/fuse-${{ github.ref_name }}-linux-${{ matrix.goarch }}" ./cmd/fuse
+          go build -ldflags="-s -w -X github.com/provasign/fuse/internal/version.Version=${{ github.ref_name }}" -o "dist/fuse-${{ github.ref_name }}-linux-${{ matrix.goarch }}" ./cmd/fuse
       - uses: actions/upload-artifact@v5
         with:
           name: fuse-linux-${{ matrix.goarch }}
@@ -58,7 +58,7 @@ jobs:
           CC: ${{ matrix.goarch == 'amd64' && 'clang -arch x86_64' || 'clang -arch arm64' }}
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w" -o "dist/fuse-${{ github.ref_name }}-darwin-${{ matrix.goarch }}" ./cmd/fuse
+          go build -ldflags="-s -w -X github.com/provasign/fuse/internal/version.Version=${{ github.ref_name }}" -o "dist/fuse-${{ github.ref_name }}-darwin-${{ matrix.goarch }}" ./cmd/fuse
       - uses: actions/upload-artifact@v5
         with:
           name: fuse-darwin-${{ matrix.goarch }}
@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w" -o "dist/fuse-${{ github.ref_name }}-windows-amd64.exe" ./cmd/fuse
+          go build -ldflags="-s -w -X github.com/provasign/fuse/internal/version.Version=${{ github.ref_name }}" -o "dist/fuse-${{ github.ref_name }}-windows-amd64.exe" ./cmd/fuse
       - uses: actions/upload-artifact@v5
         with:
           name: fuse-windows-amd64
