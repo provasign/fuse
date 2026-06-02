@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/merge"
 )
 
 // Phase-by-phase orchestrator coverage.

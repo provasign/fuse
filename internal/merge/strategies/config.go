@@ -7,7 +7,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // ConfigMergeResult is the output of a config (JSON/YAML/TOML) deep merge.

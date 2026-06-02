@@ -1,7 +1,7 @@
 // Package core contains shared data types used across Fuse subpackages.
 package core
 
-import "github.com/tabladrum/grove-suite/astkit"
+import "github.com/provasign/astkit"
 
 // LanguageKey is re-exported from astkit (shared with Grove).
 type LanguageKey = astkit.LanguageKey

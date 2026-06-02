@@ -3,7 +3,7 @@ package strategies
 import (
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 func symCov(name, body string) *core.SymbolData {

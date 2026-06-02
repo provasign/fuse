@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/languages"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge/analysis"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge/classification"
-	mstrat "github.com/tabladrum/grove-suite/fuse/internal/merge/strategies"
-	"github.com/tabladrum/grove-suite/fuse/internal/parser"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/languages"
+	"github.com/provasign/fuse/internal/merge/analysis"
+	"github.com/provasign/fuse/internal/merge/classification"
+	mstrat "github.com/provasign/fuse/internal/merge/strategies"
+	"github.com/provasign/fuse/internal/parser"
 )
 
 // IntelliMerge orchestrates parsing, classification, merging, and diagnostics

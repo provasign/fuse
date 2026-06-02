@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/grove"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/grove"
 )
 
 // GroveLike is the small subset of the Grove client the analyzer uses. Defined

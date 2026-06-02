@@ -7,8 +7,8 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 
-	"github.com/tabladrum/grove-suite/astkit"
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/astkit"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // Engine wraps astkit's parser engine for Fuse's in-memory three-way merge.

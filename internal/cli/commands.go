@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/config"
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/grove"
-	"github.com/tabladrum/grove-suite/fuse/internal/handoff"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge/analysis"
-	"github.com/tabladrum/grove-suite/fuse/internal/parser"
-	"github.com/tabladrum/grove-suite/fuse/internal/version"
+	"github.com/provasign/fuse/internal/config"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/grove"
+	"github.com/provasign/fuse/internal/handoff"
+	"github.com/provasign/fuse/internal/merge"
+	"github.com/provasign/fuse/internal/merge/analysis"
+	"github.com/provasign/fuse/internal/parser"
+	"github.com/provasign/fuse/internal/version"
 )
 
 // Run dispatches subcommands. argv excludes the program name.

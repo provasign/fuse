@@ -3,8 +3,8 @@
 package languages
 
 import (
-	"github.com/tabladrum/grove-suite/astkit"
-	"github.com/tabladrum/grove-suite/astkit/strategies"
+	"github.com/provasign/astkit"
+	"github.com/provasign/astkit/strategies"
 )
 
 // Strategy is an alias to astkit.Strategy.

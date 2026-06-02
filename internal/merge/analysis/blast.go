@@ -3,7 +3,7 @@ package analysis
 import (
 	"context"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/grove"
+	"github.com/provasign/fuse/internal/grove"
 )
 
 // BlastRadius returns the file paths transitively impacted by a symbol per

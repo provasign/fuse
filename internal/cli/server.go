@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/config"
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/merge"
-	"github.com/tabladrum/grove-suite/fuse/internal/parser"
+	"github.com/provasign/fuse/internal/config"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/merge"
+	"github.com/provasign/fuse/internal/parser"
 )
 
 // startServer launches the HTTP API used for programmatic merges.

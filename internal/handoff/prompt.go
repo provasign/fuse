@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // PromptInputs is the data needed to build a Markdown handoff prompt.

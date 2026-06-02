@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 func TestDetectLanguage(t *testing.T) {

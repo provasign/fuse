@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // ── git helpers ─────────────────────────────────────────────────────────────

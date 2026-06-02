@@ -1,7 +1,7 @@
 // Package strategies implements three-way merge algorithms.
 package strategies
 
-import "github.com/tabladrum/grove-suite/fuse/internal/core"
+import "github.com/provasign/fuse/internal/core"
 
 // MergeAction enumerates the outcomes of a single three-way decision.
 type MergeAction string

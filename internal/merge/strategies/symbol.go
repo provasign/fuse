@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // SymbolMergeResult is the output of a symbol-level three-way merge.
