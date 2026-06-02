@@ -92,6 +92,23 @@ Feed this file to an AI agent to resolve the conflict in context.
 
 ## Installation
 
+**Binary install (fastest):**
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/provasign/fuse/main/install.sh | bash
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/provasign/fuse/main/install.ps1 | iex
+
+# Pin a specific version
+VERSION=v0.4.0 curl -fsSL https://raw.githubusercontent.com/provasign/fuse/main/install.sh | bash
+```
+
+Installs to `~/bin` by default. Set `INSTALL_DIR=/usr/local/bin` to override.
+
+**Build from source:**
+
 ```bash
 make build    # compile ./bin/fuse
 make install  # install to $GOPATH/bin
