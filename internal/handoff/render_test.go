@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 func TestWriteAndRenderMarkdown_Full(t *testing.T) {

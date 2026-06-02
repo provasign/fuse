@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // ── SymbolMerge: ActionConflict where oursPtr==nil (base!=nil, ours deleted, theirs modified) ──

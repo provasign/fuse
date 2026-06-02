@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
-	"github.com/tabladrum/grove-suite/fuse/internal/grove"
+	"github.com/provasign/fuse/internal/core"
+	"github.com/provasign/fuse/internal/grove"
 )
 
 type fakeGrove struct {

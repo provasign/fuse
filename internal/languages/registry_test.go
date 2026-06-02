@@ -3,7 +3,7 @@ package languages
 import (
 	"testing"
 
-	"github.com/tabladrum/grove-suite/astkit"
+	"github.com/provasign/astkit"
 )
 
 func TestNewRegistry(t *testing.T) {

@@ -3,7 +3,7 @@ package classification
 import (
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 func TestClassify_AllBranches(t *testing.T) {

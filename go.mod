@@ -1,4 +1,4 @@
-module github.com/tabladrum/grove-suite/fuse
+module github.com/provasign/fuse
 
 go 1.26
 

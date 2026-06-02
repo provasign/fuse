@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/config"
+	"github.com/provasign/fuse/internal/config"
 )
 
 func TestExtractConflicts_Stub(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	groveeng "github.com/tabladrum/grove-suite/grove/pkg/grove"
+	groveeng "github.com/provasign/grove/pkg/grove"
 )
 
 // Edge mirrors the engine edge shape Fuse consumes.

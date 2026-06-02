@@ -4,7 +4,7 @@ package classification
 import (
 	"strings"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // Inputs is the set of signals the classifier examines.

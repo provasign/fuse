@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/cli"
+	"github.com/provasign/fuse/internal/cli"
 )
 
 func main() {

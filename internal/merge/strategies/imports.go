@@ -3,7 +3,7 @@ package strategies
 import (
 	"sort"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 // ImportMergeResult is the output of a three-way import merge.

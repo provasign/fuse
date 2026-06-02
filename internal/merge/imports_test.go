@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/core"
+	"github.com/provasign/fuse/internal/core"
 )
 
 func TestRenderImportBlock_Go(t *testing.T) {

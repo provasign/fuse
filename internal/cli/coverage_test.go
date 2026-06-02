@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tabladrum/grove-suite/fuse/internal/config"
+	"github.com/provasign/fuse/internal/config"
 )
 
 // withDir changes cwd for the duration of the test.
