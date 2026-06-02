@@ -1,6 +1,6 @@
 BINARY     := fuse
 VERSION    ?= 0.1.0-dev
-PKG        := github.com/tabladrum/grove-suite/fuse
+PKG        := github.com/provasign/fuse
 LDFLAGS    := -X $(PKG)/internal/version.Version=$(VERSION)
 
 .PHONY: build test lint install clean run release proto fmt
