@@ -49,4 +49,4 @@ Fuse is a semantic Git merge driver. MIT licensed. Requires Grove for cross-file
 - [x] Handoff prompt includes Grove blast radius and breaking change analysis
 - [ ] Homebrew tap: `brew install fuse`
 - [ ] `curl | sh` installer for Linux
-- [ ] Published Go module: `github.com/tabladrum/grove-suite/fuse`
+- [ ] Published Go module: `github.com/provasign/fuse`
