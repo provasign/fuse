@@ -91,6 +91,29 @@ func TestClient_OptionalDefaultsAndClose(t *testing.T) {
 	c.Close()
 }
 
+func TestEnsureIndexed_BuildsEmptyIndex(t *testing.T) {
+	dir := t.TempDir()
+	_ = writeFile(t, dir, "main.go", "package main\n\nfunc Main() {}\n\nfunc Use() { Main() }\n")
+
+	c := New("").WithTokenFromDir(dir)
+	defer c.Close()
+	ctx := context.Background()
+	if err := c.EnsureIndexed(ctx); err != nil {
+		t.Fatalf("ensure indexed (empty): %v", err)
+	}
+	syms, err := c.Symbols(ctx, "Main", 10)
+	if err != nil {
+		t.Fatalf("symbols: %v", err)
+	}
+	if len(syms) == 0 {
+		t.Fatal("expected auto-index to populate symbols")
+	}
+	// Second call takes the delta-refresh path and must not error.
+	if err := c.EnsureIndexed(ctx); err != nil {
+		t.Fatalf("ensure indexed (populated): %v", err)
+	}
+}
+
 func TestClient_Index_EmptyDirUsesRoot(t *testing.T) {
 	dir := t.TempDir()
 	_ = writeFile(t, dir, "a.go", "package main\n\nfunc A() {}\n")

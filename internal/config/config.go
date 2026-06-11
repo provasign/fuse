@@ -24,6 +24,7 @@ type MergeConfig struct {
 	EnableBreakingChange bool    `yaml:"enable_breaking_change"`
 	EnableContext        bool    `yaml:"enable_context"`
 	GroveRequired        bool    `yaml:"grove_required"`
+	AutoIndex            bool    `yaml:"auto_index"`
 }
 
 type GitConfig struct {
@@ -47,6 +48,7 @@ func Default() *Config {
 			EnableBreakingChange: true,
 			EnableContext:        true,
 			GroveRequired:        true,
+			AutoIndex:            true,
 		},
 		Git: GitConfig{
 			AutoInstall:     false,

@@ -105,21 +105,30 @@ func loadConfig() *config.Config {
 // development setups where Grove auth is disabled.
 func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 	cwd, _ := os.Getwd()
+	c := grove.New(cfg.GroveURL).WithTokenFromDir(cwd)
+	healthTimeout := 10 * time.Second
 	if !required {
-		c := grove.New(cfg.GroveURL).WithTokenFromDir(cwd)
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		defer cancel()
-		if err := c.Health(ctx); err != nil {
-			return nil, nil
-		}
-		return c, nil
+		healthTimeout = 500 * time.Millisecond
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), healthTimeout)
 	defer cancel()
-	if err := grove.EnsureRunning(ctx, cfg.GroveURL, cfg.GroveBinary, cwd, 10*time.Second); err != nil {
-		return nil, err
+	if err := c.Health(ctx); err != nil {
+		if required {
+			return nil, err
+		}
+		return nil, nil
 	}
-	return grove.New(cfg.GroveURL).WithTokenFromDir(cwd), nil
+	// Make sure the index is usable: a fresh clone opens with zero symbols
+	// and blast-radius queries would silently return nothing. Best-effort —
+	// a merge must not fail because indexing did.
+	if cfg.Merge.AutoIndex {
+		ictx, icancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer icancel()
+		if err := c.EnsureIndexed(ictx); err != nil {
+			fmt.Fprintf(os.Stderr, "fuse: grove auto-index failed (%v); cross-file analysis degraded\n", err)
+		}
+	}
+	return c, nil
 }
 
 func closeGroveClient(c analysis.GroveLike) {

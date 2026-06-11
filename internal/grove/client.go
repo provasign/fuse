@@ -157,6 +157,31 @@ func (c *Client) Symbols(ctx context.Context, query string, limit int) ([]Symbol
 	return out, nil
 }
 
+// EnsureIndexed makes the embedded index usable for blast-radius queries.
+// On a fresh clone the engine opens with zero symbols and every Impact/Deps
+// call silently returns nothing, so an empty index triggers a full build
+// (bounded by ctx). A populated index gets a best-effort delta refresh so the
+// graph reflects the current working tree; refresh errors are swallowed
+// because stale impact data is better than failing the merge.
+func (c *Client) EnsureIndexed(ctx context.Context) error {
+	e, err := c.ensure(ctx)
+	if err != nil {
+		return err
+	}
+	st, err := e.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("grove status: %w", err)
+	}
+	if st.SymbolCount == 0 {
+		if _, err := e.Index(ctx, c.root); err != nil {
+			return fmt.Errorf("grove index: %w", err)
+		}
+		return nil
+	}
+	_, _ = e.Index(ctx, c.root)
+	return nil
+}
+
 // Index triggers (re-)indexing of dir.
 func (c *Client) Index(ctx context.Context, dir string) error {
 	e, err := c.ensure(ctx)
