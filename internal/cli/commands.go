@@ -212,6 +212,19 @@ func cmdMerge(args []string) int {
 	im.EnableBreaking = cfg.Merge.EnableBreakingChange && groveClient != nil
 	im.EnableContext = cfg.Merge.EnableContext && groveClient != nil
 
+	// Capture the pre-merge graph for drift evidence. Only meaningful when
+	// git gave us the logical repo path (%P): with temp-path-only
+	// invocations the snapshot has no symbols at that path and every merged
+	// symbol would misreport as "added".
+	var preMerge grove.GraphSnapshot
+	var driftClient *grove.Client
+	if dc, ok := groveClient.(*grove.Client); ok && cfg.Merge.EnableDrift && logicalPath != oursPath {
+		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+		preMerge, _ = dc.Snapshot(sctx)
+		scancel()
+		driftClient = dc
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	res, err := im.Merge(ctx, baseContent, oursContent, theirsContent, lang, logicalPath)
@@ -250,6 +263,14 @@ func cmdMerge(args []string) int {
 		return 2
 	}
 
+	// Drift evidence: the structural code-graph delta this merge produces.
+	// Auto-merges only — a conflicted result still carries markers, so its
+	// "symbols" would be noise; the resolved drift lands when the conflict
+	// is actually resolved and reindexed.
+	if driftClient != nil && gitDir != "" && !res.HasConflict && res.Strategy != core.StrategyHandoff {
+		recordDrift(driftClient, preMerge, gitDir, logicalPath, res)
+	}
+
 	for _, d := range res.Diagnostics {
 		fmt.Fprintln(os.Stderr, "fuse:", d)
 	}
@@ -262,6 +283,30 @@ func cmdMerge(args []string) int {
 	}
 	fmt.Fprintf(os.Stderr, "fuse: %s [%s] → auto-merged (confidence=%.2f)\n", logicalPath, res.Strategy, res.Confidence)
 	return 0
+}
+
+// recordDrift appends the structural delta of one merged file to
+// .git/fuse/drift.json and prints a one-line summary. Advisory and
+// fail-open throughout: a merge never fails because drift capture did.
+// The merged bytes are diffed in memory against the pre-merge snapshot —
+// git writes %A to the worktree only after the driver exits, so the
+// post-merge state is never on disk while we run.
+func recordDrift(client *grove.Client, preMerge grove.GraphSnapshot, gitDir, logicalPath string, res *core.MergeResult) {
+	if preMerge == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	drift, err := client.DriftForMergedFile(ctx, preMerge, filepath.ToSlash(logicalPath), []byte(res.MergedContent))
+	if err != nil || drift.Empty() {
+		return
+	}
+	_ = handoff.AppendDrift(filepath.Join(gitDir, "fuse"), handoff.DriftRecord{
+		File:     logicalPath,
+		Strategy: string(res.Strategy),
+		Drift:    drift,
+	})
+	fmt.Fprintf(os.Stderr, "fuse: %s graph drift: %s\n", logicalPath, drift.Summary())
 }
 
 // isBinary returns true if data looks like a binary file. Heuristic: any
@@ -449,7 +494,28 @@ func cmdStatus(_ []string) int {
 			e.Timestamp, e.File, e.Strategy, e.Confidence,
 			boolToInt(!e.AutoMerged), e.BreakingChanges)
 	}
+	printDriftStatus(filepath.Join(gitDir, "fuse", "drift.json"))
 	return 0
+}
+
+// printDriftStatus summarizes recorded graph drift (structural symbol deltas
+// per merge) beneath the audit listing.
+func printDriftStatus(driftPath string) {
+	data, err := os.ReadFile(driftPath)
+	if err != nil {
+		return
+	}
+	var records []handoff.DriftRecord
+	if err := json.Unmarshal(data, &records); err != nil || len(records) == 0 {
+		return
+	}
+	fmt.Printf("%d merge(s) with graph drift\n", len(records))
+	for _, r := range records {
+		fmt.Printf("  %s  %s  %s\n", r.Timestamp, r.File, r.Drift.Summary())
+		for _, d := range r.Drift.Breaking {
+			fmt.Printf("    breaking: %s %s (%s → %s)\n", d.Kind, d.QualifiedName, d.OldSignature, d.NewSignature)
+		}
+	}
 }
 
 func boolToInt(b bool) int {

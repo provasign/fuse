@@ -166,6 +166,14 @@ Fuse exists for the layer above:
   agent's validated resolution.
 - **Audit trail.** Every decision is recorded in `.git/fuse/audit.json` —
   what was merged, by which strategy, at what confidence.
+- **Graph drift evidence.** Every auto-merge also records the structural
+  code-graph delta it produced in `.git/fuse/drift.json`: which symbols were
+  added, removed, or changed, and which changes break the exported surface
+  (old vs. new signature). Drift is matched by stable symbol identity via
+  Grove's graph diff, so line shifts don't register — only real structural
+  change does. This is the raw material for telling a concurrent agent
+  *"the ground shifted under you: `Login()` changed"* mid-task. Advisory and
+  fail-open; `fuse status` summarizes it.
 
 ---
 
@@ -248,6 +256,7 @@ merge:
   handoff_threshold: 0.30        # below this, emit a handoff prompt
   enable_breaking_change: true   # Grove-backed breaking-change detection
   enable_context: true           # Grove context in handoff prompts
+  enable_drift: true             # record per-merge graph drift evidence
   grove_required: true           # fail if the Grove index can't be opened
   auto_index: true               # build/refresh the Grove index before merges
 

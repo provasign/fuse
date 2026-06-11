@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	Version     int          `yaml:"version"`
-	GroveURL    string       `yaml:"grove_url"`
-	GroveBinary string       `yaml:"grove_binary"`
+	Version     int           `yaml:"version"`
+	GroveURL    string        `yaml:"grove_url"`
+	GroveBinary string        `yaml:"grove_binary"`
 	Merge       MergeConfig   `yaml:"merge"`
 	Git         GitConfig     `yaml:"git"`
 	Server      ServerConfig  `yaml:"server"`
@@ -31,8 +31,11 @@ type MergeConfig struct {
 	HandoffThreshold     float64 `yaml:"handoff_threshold"`
 	EnableBreakingChange bool    `yaml:"enable_breaking_change"`
 	EnableContext        bool    `yaml:"enable_context"`
-	GroveRequired        bool    `yaml:"grove_required"`
-	AutoIndex            bool    `yaml:"auto_index"`
+	// EnableDrift records the structural code-graph delta of each merge to
+	// .git/fuse/drift.json (advisory, fail-open). Requires Grove.
+	EnableDrift   bool `yaml:"enable_drift"`
+	GroveRequired bool `yaml:"grove_required"`
+	AutoIndex     bool `yaml:"auto_index"`
 }
 
 type GitConfig struct {
@@ -55,6 +58,7 @@ func Default() *Config {
 			HandoffThreshold:     0.30,
 			EnableBreakingChange: true,
 			EnableContext:        true,
+			EnableDrift:          true,
 			GroveRequired:        true,
 			AutoIndex:            true,
 		},
