@@ -1,8 +1,8 @@
 # Fuse
 
-> **Symbol-aware Git merge driver. Auto-resolves the conflicts that shouldn't exist.**
+> **Symbol-aware Git merge driver. Auto-resolves the conflicts that shouldn't exist — and never does worse than git.**
 
-> **Embedded Grove:** Fuse now links Grove directly and opens the on-disk index in-process. No `grove serve` daemon, no `grove_url`, no token — if old docs mention them, you're on a pre-embedded build.
+> **Embedded Grove:** Fuse links Grove directly and opens the on-disk index in-process. No `grove serve` daemon, no `grove_url`, no token — if old docs mention them, you're on a pre-embedded build.
 
 ---
 
@@ -12,7 +12,7 @@ Git sees lines. It doesn't know your agent changed `Login()` while your human ch
 
 Multiply that by a hundred agent PRs a week.
 
-Fuse replaces git's line-level merge with a symbol-aware one. It parses all three versions of a file with Tree-sitter, extracts symbols, queries Grove for cross-file blast radius, and merges at symbol granularity. Two changes to different symbols never conflict, regardless of where they appear in the file. The ones that are genuinely ambiguous get conflict markers plus an AI-ready handoff prompt — all the context an agent needs to resolve them in one pass.
+Fuse replaces git's line-level merge with an escalation ladder. Anything git can merge cleanly, fuse merges byte-for-byte identically. Where git conflicts, fuse escalates: first a finer-grained line merge, then a Tree-sitter symbol merge that understands that two changes to different symbols never conflict, regardless of where they appear in the file. Every auto-merged result is re-parsed before it ships — a merge that doesn't parse is discarded and surfaced as a conflict instead. The conflicts that survive all of that get git markers plus an AI-ready handoff prompt with Grove blast-radius context, and `fuse resolve --agent` can hand them to an agent in one command.
 
 ---
 
@@ -24,29 +24,59 @@ git merge <branch>
      ▼
 fuse merge %O %A %B %P
      │
-     ├──► Grove: /impact  (blast radius of changed symbols)
-     ├──► Grove: /deps    (cross-file dependencies)
-     │
      ▼
-┌─────────────────────────────────────────────────────────┐
-│  IntelliMerge — 7-phase pipeline                        │
-│                                                         │
-│  Phase 1: Context building        (Grove API calls)     │
-│  Phase 2: Symbol extraction       (Tree-sitter, in-mem) │
-│  Phase 3: Recency analysis        (git log weighting)   │
-│  Phase 4: Project graph context   (cross-file edges)    │
-│  Phase 5: Breaking change detect  (signature diff)      │
-│  Phase 6: Conflict classification (5 categories)        │
-│  Phase 7: Strategy selection      (5 strategies)        │
-└──────────────────────────────────┬──────────────────────┘
-                                   │
-                      ┌────────────┴─────────────┐
-                      ▼                          ▼
-              Auto-resolved               Unresolvable
-              Write merged file     Conflict markers +
-              Exit 0               .git/fuse/conflict-<sha>.md
-                                   Exit 1
+┌──────────────────────────────────────────────────────────────┐
+│  Escalation ladder                                           │
+│                                                              │
+│  1. git-equivalent line merge   clean + parses? → ship       │
+│     (byte-for-byte git semantics — fuse is never worse       │
+│      than git)                                               │
+│  2. fine-grained LCS line merge clean + parses? → ship       │
+│     (resolves adjacent-but-disjoint edits git rejects)       │
+│  3. symbol merge (Tree-sitter)  clean + parses? → ship       │
+│     (resolves same-location additions, distinct-symbol       │
+│      edits, independent methods of one class)                │
+│                                                              │
+│  validation gate: every clean result is re-parsed            │
+│  (tree-sitter + stdlib go/parser for Go); failures are       │
+│  surfaced as conflicts, never silently shipped               │
+│                                                              │
+│  alongside: Grove blast radius + breaking-change detection   │
+│  (cross-file impact of changed exports, both sides)          │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                  ┌────────────┴─────────────┐
+                  ▼                          ▼
+          Auto-resolved               Unresolvable
+          Write merged file     Conflict markers +
+          Exit 0                .git/fuse/conflict-<sha>.md
+                                Exit 1
 ```
+
+---
+
+## Measured Accuracy
+
+Fuse ships with its own benchmark: `fuse bench <repo>` replays every merge
+commit in a repository's history, re-merges each file both branches modified,
+and scores the result against the resolution the humans actually committed.
+
+Replaying [gin](https://github.com/gin-gonic/gin)'s full merge history
+(148 merge commits, 89 dual-modified files):
+
+|                  | files | fuse resolved | matches human resolution |
+|------------------|------:|--------------:|-------------------------:|
+| git conflicted   |    16 |       4 (25%) |                  3 (75%) |
+| git auto-merged  |    73 |     73 (100%) |                73 (100%) |
+
+Two properties matter more than the headline rate:
+
+- **Parity:** on every file git can merge, fuse produces the identical bytes.
+- **No silent corruption:** every auto-merge is re-parsed; anything suspect
+  becomes an explicit conflict.
+
+Run it on your own history: `fuse bench . --limit 200`. Numbers vary by
+codebase and conflict style; measure, don't trust.
 
 ---
 
@@ -54,39 +84,56 @@ fuse merge %O %A %B %P
 
 Fuse classifies every conflict before choosing a resolution strategy:
 
-| Class | Description | Typical auto-resolution rate |
-|-------|-------------|------------------------------|
-| `INCREMENTAL` | Additive changes to different parts of a symbol | ~85% |
-| `STRUCTURAL` | One branch renamed or moved a symbol | ~60% |
-| `CONFIGURATIONAL` | Changes to config/dependency files | ~80% |
-| `ARCHITECTURAL` | Cross-file interface or API change | Handoff |
-| `COMPLEX` | Interleaved logic changes | Handoff |
+| Class | Description |
+|-------|-------------|
+| `INCREMENTAL` | Additive changes to different parts of a symbol |
+| `STRUCTURAL` | One branch renamed or moved a symbol |
+| `CONFIGURATIONAL` | Changes to config/dependency files |
+| `ARCHITECTURAL` | Cross-file interface or API change |
+| `COMPLEX` | Interleaved logic changes |
 
----
-
-## Merge Strategies
-
-| Strategy | Confidence | When used |
-|----------|-----------|-----------|
-| Symbol | ≥ 85% | Distinct symbol changes |
-| Import | ≥ 90% | Import statement differences |
-| Config | ≥ 80% | JSON/YAML/TOML structure merge |
-| Line | 60–70% | Structural changes (fallback) |
-| Handoff | < 30% | Complex/architectural conflicts |
+The classification drives handoff prompt content and audit records.
 
 ---
 
 ## AI Handoff
 
-When Fuse cannot resolve a conflict confidently, it writes a structured prompt to `.git/fuse/conflict-<hash>.md`. The prompt includes:
+When Fuse cannot resolve a conflict, it writes a structured prompt to `.git/fuse/conflict-<hash>.md`:
 
-- All three versions of the conflicting region (base, ours, theirs)
+- All three versions of the conflicting symbols (base, ours, theirs)
 - Symbol signatures from all three versions
-- Grove blast radius: what other symbols reference the changed symbol
-- Grove breaking change analysis: what callers would break under each version
-- A suggested resolution approach based on conflict classification
+- Grove blast radius: what other files reference the changed symbols
+- Grove breaking-change analysis: what callers would break under each version
+- A resolution task with explicit output contract
 
-Feed this file to an AI agent to resolve the conflict in context.
+Close the loop in one command:
+
+```bash
+# Pipe the prompt into any agent CLI; validate; write the resolution.
+fuse resolve .git/fuse/conflict-abc123.md --agent "claude -p" --apply
+```
+
+The agent contract is plain: prompt on stdin, complete resolved file on
+stdout. Fuse validates the output before it touches your working tree —
+non-empty, no conflict markers, parses cleanly — and rejects anything else.
+Set `resolve.agent_cmd` in `fuse.yaml` to make `--agent` the default.
+
+---
+
+## Why not mergiraf?
+
+[Mergiraf](https://mergiraf.org) is an excellent structured merge driver, and
+if you only want syntax-aware single-file merging you should consider it.
+Fuse exists for the layer above:
+
+- **Cross-file awareness.** Fuse queries Grove's code graph for blast radius
+  and breaking-change analysis — "this merge removes an export that 6 files
+  call" is information no single-file merger can produce.
+- **AI handoff.** Unresolvable conflicts become agent-ready prompts with all
+  three versions plus graph context, and `fuse resolve --agent` applies the
+  agent's validated resolution.
+- **Audit trail.** Every decision is recorded in `.git/fuse/audit.json` —
+  what was merged, by which strategy, at what confidence.
 
 ---
 
@@ -114,21 +161,14 @@ make build    # compile ./bin/fuse
 make install  # install to $GOPATH/bin
 ```
 
-Register as a Git merge driver globally:
+Register as a Git merge driver in the current repository:
 
 ```bash
 fuse install
 ```
 
-This writes to `~/.gitconfig`:
-
-```
-[merge "fuse"]
-    name = Fuse semantic merge driver
-    driver = fuse merge %O %A %B %P
-```
-
-Per-repository, add `.gitattributes`:
+This sets `merge.fuse.name` / `merge.fuse.driver` in the repo's git config
+and appends the supported patterns to `.gitattributes`:
 
 ```
 *.go   merge=fuse
@@ -136,7 +176,14 @@ Per-repository, add `.gitattributes`:
 *.py   merge=fuse
 *.java merge=fuse
 *.rs   merge=fuse
-*.cs   merge=fuse
+...
+```
+
+To register for all repositories instead, set the driver globally yourself:
+
+```bash
+git config --global merge.fuse.name "Fuse semantic merge driver"
+git config --global merge.fuse.driver "fuse merge %O %A %B %P"
 ```
 
 ---
@@ -144,12 +191,18 @@ Per-repository, add `.gitattributes`:
 ## CLI Reference
 
 ```bash
-fuse install                    # register git driver globally
+fuse install                    # register git driver + .gitattributes in this repo
 fuse uninstall                  # remove git driver registration
-fuse merge <base> <ours> <theirs> <path>   # manual invocation (normally called by git)
-fuse status [dir]               # show merge driver config and Grove connection
-fuse audit [dir]                # show recent merge decisions
-fuse config [dir]               # show or edit fuse.yaml
+fuse merge <base> <ours> <theirs> [path]    # manual invocation (normally called by git)
+fuse preview <base> <ours> <theirs>         # print merged result without writing
+fuse resolve <conflict-file> [--agent <cmd>] [--apply]   # AI-resolve a conflict
+fuse bench [repo] [--limit N] [--json]      # replay merge history, score accuracy
+fuse check <file>               # breaking changes vs HEAD
+fuse impact <file-or-symbol>    # blast radius via Grove
+fuse deps <file>                # dependency edges via Grove
+fuse status                     # show recent merge decisions from the audit log
+fuse config                     # print resolved configuration
+fuse serve [--port 9999]        # start HTTP API
 ```
 
 ---
@@ -159,38 +212,51 @@ fuse config [dir]               # show or edit fuse.yaml
 `fuse.yaml` in the project root:
 
 ```yaml
-grove_url: http://localhost:7777     # Grove instance
-languages:                           # which file types to handle
-  - go
-  - typescript
-  - javascript
-  - python
-  - java
-  - rust
-  - csharp
-confidence_threshold: 0.70          # below this, produce handoff prompt
-audit_log: true                      # write .git/fuse/audit.json
-```
+merge:
+  handoff_threshold: 0.30        # below this, emit a handoff prompt
+  enable_breaking_change: true   # Grove-backed breaking-change detection
+  enable_context: true           # Grove context in handoff prompts
+  grove_required: true           # fail if the Grove index can't be opened
+  auto_index: true               # build/refresh the Grove index before merges
 
-Environment override: `GROVE_URL`.
+resolve:
+  agent_cmd: "claude -p"         # default agent for `fuse resolve`
+
+server:
+  port: 9999
+```
 
 ---
 
-## Grove Dependency
+## Grove Integration
 
-Fuse requires a running Grove instance. It checks `$GROVE_URL/health` on startup and auto-starts `grove serve` if unreachable. Grove provides the cross-file blast radius and breaking change detection that make the `ARCHITECTURAL` and `COMPLEX` classifications meaningful — without it, Fuse falls back to line-level merge for those cases.
+Fuse embeds [Grove](https://github.com/provasign/grove) as a library and
+opens the repository's `.grove/` index in-process — no daemon. Grove provides
+the cross-file blast radius and breaking-change detection that make handoff
+prompts meaningful.
+
+On first use in a fresh clone the index is empty; with `merge.auto_index`
+(default on) fuse builds it automatically and delta-refreshes it before
+merges so impact data reflects the working tree. Without Grove data, fuse
+still merges — it just loses cross-file analysis.
 
 ---
 
 ## Tree-sitter Usage
 
-Fuse uses Tree-sitter independently of Grove — it parses the three in-memory merge versions (base, ours, theirs) as strings, not files on disk. This is distinct from Grove's file-on-disk indexing. Fuse needs to parse the same file in three states simultaneously within a single merge invocation; going through Grove's indexer would require writing all three versions to disk and reindexing.
+Fuse parses the three in-memory merge versions (base, ours, theirs) as
+strings with Tree-sitter, independent of Grove's on-disk indexing — a merge
+needs the same file in three states simultaneously. Merged output is
+re-parsed before shipping; for Go, the stdlib parser is also consulted
+because tree-sitter's Go grammar tolerates constructs `gofmt` rejects.
 
 ---
 
 ## Language Support
 
-Same languages as Grove's parser: Go, TypeScript, TSX, JavaScript, Python, Java, Rust, C, C++, C#, PHP. Config file formats (JSON, YAML, TOML) use a structural diff instead of Tree-sitter.
+Symbol-level merge: Go, TypeScript, TSX, JavaScript, Python, Java, Rust.
+Config formats (JSON, YAML, TOML): line merge first, structural deep merge
+on conflict. Everything else: git-equivalent line merge.
 
 ---
 
@@ -200,15 +266,19 @@ Every merge decision is appended to `.git/fuse/audit.json`:
 
 ```json
 {
-  "timestamp": "2026-05-28T14:23:01Z",
+  "timestamp": "2026-06-11T14:23:01Z",
   "file": "internal/auth/login.go",
-  "class": "INCREMENTAL",
-  "strategy": "Symbol",
+  "language": "go",
+  "strategy": "symbol",
+  "conflictType": "INCREMENTAL",
+  "severity": "LOW",
   "confidence": 0.92,
-  "resolved": true,
-  "symbols_merged": ["Login", "validatePassword"]
+  "autoMerged": true,
+  "breakingChanges": 0
 }
 ```
+
+`fuse status` prints the recent entries.
 
 ---
 
@@ -218,7 +288,7 @@ Every merge decision is appended to `.git/fuse/audit.json`:
 # Build
 make build
 
-# Register fuse as the merge driver
+# Register fuse as the merge driver in this repo
 ./bin/fuse install
 
 # Show resolved config
@@ -227,6 +297,9 @@ make build
 # Test a three-way merge directly (no Git required)
 ./bin/fuse merge base.go ours.go theirs.go path/in/repo.go
 # Exit 0 = clean; Exit 1 = conflict markers written to ours.go
+
+# Score fuse against your own merge history
+./bin/fuse bench . --limit 200
 
 # Start HTTP API
 ./bin/fuse serve --port 9999
@@ -239,9 +312,11 @@ curl -X POST http://localhost:9999/merge \
 
 ## Status
 
-Phase 1 complete: parsing, three-way merge for 7 languages (Go, TypeScript, TSX,
-JavaScript, Python, Java, Rust) plus config merge for JSON/YAML/TOML. Tree-sitter
-backed symbol extraction, LCS-based line fallback, classification, Grove-backed
-breaking change detection, AI handoff prompt generation, audit log.
+The merge pipeline is benchmarked against real merge history (`fuse bench`)
+with two hard invariants: byte-parity with git wherever git succeeds, and no
+auto-merge ships without re-parsing cleanly. Symbol-level merge covers 7
+languages plus structural config merge for JSON/YAML/TOML. Grove-backed
+breaking-change detection, AI handoff with agent integration
+(`fuse resolve --agent`), and an append-only audit log round out the loop.
 
 Run `make test` for the test suite.

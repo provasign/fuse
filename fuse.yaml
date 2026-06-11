@@ -15,6 +15,9 @@ merge:
   # If true, fuse will fail when Grove is unreachable. Set to false to allow
   # degraded operation (line-level merge + no breaking-change detection).
   grove_required: true
+  # Build the Grove index automatically when it is empty, and delta-refresh
+  # it before merges so blast-radius data reflects the working tree.
+  auto_index: true
 
 git:
   # When true, `fuse install` runs automatically the first time `fuse merge` is
@@ -25,3 +28,9 @@ git:
 
 server:
   port: 9999
+
+resolve:
+  # Shell command for `fuse resolve --apply`: reads the conflict prompt on
+  # stdin and writes the complete resolved file to stdout.
+  # agent_cmd: "claude -p"
+  agent_cmd: ""

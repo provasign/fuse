@@ -1,4 +1,6 @@
-// Package merge orchestrates the 7-phase IntelliMerge pipeline.
+// Package merge orchestrates the IntelliMerge escalation ladder: git-parity
+// line merge, fine-grained LCS line merge, then symbol-level merge — each
+// rung gated by a clean re-parse of the produced output.
 package merge
 
 import (
@@ -45,18 +47,20 @@ func New(g analysis.GroveLike) *IntelliMerge {
 	}
 }
 
-// Merge runs the 7-phase pipeline and returns a MergeResult.
+// Merge runs the pipeline and returns a MergeResult.
 //
-//  1. Context (Grove deps + dependents)
+//  1. Trivial exits (identical sides, one-sided change)
 //  2. Symbol extraction (parse base, ours, theirs)
-//  3. Recency analysis (placeholder; uses symbol-level signals only — no git log)
-//  4. Project graph context (Grove blast radius)
-//  5. Breaking change detection
-//  6. Classification + strategy selection + merge application
-//  7. Diagnostics + handoff prompt emission (caller handles file IO)
+//  3. Breaking change detection (Grove blast radius, optional)
+//  4. Escalation ladder:
+//     a. git-equivalent line merge — clean + parses → ship (git parity)
+//     b. fine-grained LCS line merge — clean + parses → ship
+//     c. symbol-level merge + reconstruction — validated by re-parse
+//  5. Classification + diagnostics + handoff prompt emission (caller
+//     handles file IO)
 //
-// For config files (JSON/YAML/TOML), phases 2/4/5/6 collapse to a single
-// structural deep-merge.
+// Config files (JSON/YAML/TOML) use the line merge first and a structural
+// deep-merge on conflict.
 func (im *IntelliMerge) Merge(
 	ctx context.Context,
 	baseContent, oursContent, theirsContent []byte,

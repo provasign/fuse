@@ -43,10 +43,28 @@ Fuse is a semantic Git merge driver. MIT licensed. Requires Grove for cross-file
 
 ---
 
+## v0.5.0 — Trust & Measurement ✅ shipped
+
+- [x] Escalation-ladder pipeline: git-parity line merge → fine-grained LCS line merge → symbol merge; fuse is never worse than git
+- [x] Post-merge validation gate: every auto-merge re-parsed (tree-sitter + stdlib go/parser for Go); failures surface as conflicts, never silent corruption
+- [x] `fuse bench`: replay real merge history, score resolution and human-match rates (measured on gin: 100% git parity, 4/16 git conflicts resolved, 3 byte-identical to human)
+- [x] `fuse resolve --agent <cmd> --apply`: pipe handoff prompt into any agent CLI, validate output, write resolution
+- [x] Grove auto-index: empty index built automatically, delta refresh before merges (`merge.auto_index`)
+- [x] Reconstruction fidelity: original-line passthrough for unchanged symbols, doc-comment carrying, neighbor-anchored insertion of theirs-added symbols, import style preservation, Go method/type key disambiguation
+- [x] `curl | sh` / PowerShell installers, uninstall scripts
+- [x] Embedded Grove (no daemon, no grove_url)
+
+## v0.6.0 — Distribution
+
+- [ ] GitHub Action: server-side conflict resolution for agent PR branches
+- [ ] Homebrew tap: `brew install fuse`
+- [ ] Published Go module proxy verification: `github.com/provasign/fuse`
+- [ ] Benchmark corpus expansion: TS/Python-heavy repos, publish results in README
+
 ## v1.0.0 — Production Hardening
 
-- [x] Merge accuracy: ≥ 85% auto-resolution rate on INCREMENTAL conflicts
-- [x] Handoff prompt includes Grove blast radius and breaking change analysis
-- [ ] Homebrew tap: `brew install fuse`
-- [ ] `curl | sh` installer for Linux
-- [ ] Published Go module: `github.com/provasign/fuse`
+- [ ] Provasign integration: certified merges via Grove CertifyDiff (evidence-backed audit entries)
+- [ ] Raise symbol-path resolution rate (rename detection, container-aware nested merge) — measured by `fuse bench`, gated by zero mis-merge regressions
+- [ ] Formatting-preserving structural config merge (today: line merge first, re-serializing deep merge on conflict)
+- [ ] Recency analysis (git-log weighted confidence) — currently not implemented
+- [ ] Windows shell support for `fuse resolve --agent`
