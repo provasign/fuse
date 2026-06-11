@@ -1,6 +1,8 @@
 # Fuse Roadmap
 
-Fuse is a semantic Git merge driver. MIT licensed. Requires Grove for cross-file context.
+Fuse is a semantic Git merge driver. MIT licensed. Embeds Grove for
+cross-file context. See [NEXT_STEPS.md](NEXT_STEPS.md) for the working
+plan beyond the checklists below.
 
 ---
 
@@ -54,17 +56,16 @@ Fuse is a semantic Git merge driver. MIT licensed. Requires Grove for cross-file
 - [x] `curl | sh` / PowerShell installers, uninstall scripts
 - [x] Embedded Grove (no daemon, no grove_url)
 
-## v0.6.0 — Distribution
+## v0.6.0 — Distribution & Agent Wiring
 
-- [ ] GitHub Action: server-side conflict resolution for agent PR branches
-- [ ] Homebrew tap: `brew install fuse`
-- [ ] Published Go module proxy verification: `github.com/provasign/fuse`
-- [ ] Benchmark corpus expansion: TS/Python-heavy repos, publish results in README
+- [x] GitHub Action: server-side conflict resolution for agent PR branches (shipped in v0.5.0)
+- [ ] `fuse mcp`: stdio MCP server — fuse_merge_check, fuse_preview, fuse_resolve, fuse_impact (see NEXT_STEPS.md §3)
+- [ ] Homebrew: join the family tap — `brew install provasign/shale/fuse`
+- [ ] Benchmark corpus expansion: TS/Python-heavy repos, publish per-language results in README
 
 ## v1.0.0 — Production Hardening
 
-- [ ] Provasign integration: certified merges via Grove CertifyDiff (evidence-backed audit entries)
-- [ ] Raise symbol-path resolution rate (rename detection, container-aware nested merge) — measured by `fuse bench`, gated by zero mis-merge regressions
+- [ ] Shale integration: merge events and agent resolutions as PR-card evidence; Grove CertifyDiff as advisory evidence generator — never a gate (see NEXT_STEPS.md §2)
+- [ ] Raise symbol-path resolution rate (rename detection, container-aware nested merge, import-removal semantics) — measured by `fuse bench`, gated by zero mis-merge regressions
 - [ ] Formatting-preserving structural config merge (today: line merge first, re-serializing deep merge on conflict)
-- [ ] Recency analysis (git-log weighted confidence) — currently not implemented
 - [ ] Windows shell support for `fuse resolve --agent`
