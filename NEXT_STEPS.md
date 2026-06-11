@@ -8,6 +8,33 @@ library) — never the provasign gating workflow.
 
 ---
 
+> **✅ STATUS MARKER — done up to here (2026-06-11):**
+> The Grove-side foundation for §1 is built and the evidence half of the
+> stale-context loop ships:
+>
+> - **Grove hardened** (grove commits af32c02..35102d0): all critical/high
+>   findings from `grove/docs/grove-assessment-2026-06-11.md` fixed —
+>   symbol-ID collisions, ICR fallback, per-repo module-cache pollution,
+>   CertifyDiff context-line over-reporting + `index_stale` gate, test-edge
+>   scoping, quadratic edge building (39.7s → 0.5s), no-change reindex
+>   (3.7s → 35ms), real MCP schemas + `grove_certify`, nested .gitignore +
+>   `**`, parallel parsing, ranked search.
+> - **Grove graph-diff exists** (the §1 prerequisite): `SnapshotSymbols` /
+>   `Diff` / `DiffSince` / `DiffAgainstFileContent` — stable-identity
+>   diffing with `BreakingChanges`, immune to line-shift/ID churn.
+> - **Fuse records drift** (fuse commit 6302674): every auto-merge appends
+>   the structural delta (added/removed/changed/breaking symbols with
+>   old→new signatures) to `.git/fuse/drift.json` — advisory, fail-open,
+>   gated by `merge.enable_drift`. `fuse status` summarizes it.
+>
+> **Not yet built (deliberately, per §3):** the delivery half of the loop —
+> intersecting drift with another agent's working set (Prism) and pushing
+> the notification — plus `fuse mcp` (§3), merge-quality items (§4), and
+> distribution (§5). `drift.json` is the stable interface the delivery
+> plumbing will consume.
+
+---
+
 ## 1. The four-piece story (hypothesis)
 
 Grove, Prism, Fuse, and Shale each remove a different bottleneck on running

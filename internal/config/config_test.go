@@ -11,8 +11,8 @@ func TestDefaultAndLoadNoFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.GroveURL != "http://localhost:7777" {
-		t.Errorf("unexpected GroveURL %q", cfg.GroveURL)
+	if cfg.GroveURL != "embedded://grove" {
+		t.Errorf("unexpected GroveURL %q (embedded mode has no daemon URL)", cfg.GroveURL)
 	}
 	if cfg.Server.Port != 9999 {
 		t.Errorf("unexpected port %d", cfg.Server.Port)

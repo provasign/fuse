@@ -51,7 +51,9 @@ type ServerConfig struct {
 func Default() *Config {
 	return &Config{
 		Version:     1,
-		GroveURL:    "http://localhost:7777",
+		// Grove is embedded in-process; the URL is a legacy field kept for
+		// compatibility and shown in config output. No daemon, no port.
+		GroveURL:    "embedded://grove",
 		GroveBinary: "grove",
 		Merge: MergeConfig{
 			ConfidenceMode:       "static",

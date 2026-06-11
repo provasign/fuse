@@ -100,13 +100,9 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-// newGrove builds the Grove client (and optionally ensures Grove is running).
-// Returns (nil, nil) if Grove is configured as not-required and unreachable.
-//
-// The client picks up the local laptop-mode bearer token from
-// <cwd>/.grove/.token if present, so authenticated Grove daemons accept
-// our /deps and /impact calls. Missing token is non-fatal for
-// development setups where Grove auth is disabled.
+// newGrove builds the embedded Grove client rooted at the current repo.
+// Returns (nil, nil) if Grove is configured as not-required and the index
+// cannot be opened. Grove runs in-process — no daemon, no port, no token.
 func newGrove(cfg *config.Config, required bool) (analysis.GroveLike, error) {
 	cwd, _ := os.Getwd()
 	c := grove.New(cfg.GroveURL).WithTokenFromDir(cwd)
