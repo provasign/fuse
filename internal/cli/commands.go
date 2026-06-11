@@ -77,7 +77,8 @@ Commands:
   fuse install                               Register fuse as a Git merge driver
   fuse uninstall                             Unregister fuse
   fuse status                                Show last audit stats
-  fuse resolve <conflict-file>               Print AI handoff prompt
+  fuse resolve <conflict-file> [--agent <cmd>] [--apply]
+                                             Resolve a conflict via an AI agent (no --agent: print prompt)
   fuse check <file>                          Detect breaking changes for current file (vs HEAD)
   fuse impact <file-or-symbol>               Show blast radius via Grove
   fuse deps <file>                           Show dependencies via Grove
@@ -465,18 +466,102 @@ func cmdConfig(_ []string) int {
 	return 0
 }
 
+// cmdResolve closes the AI loop. Without --agent it prints the handoff
+// prompt for manual use. With --agent (or resolve.agent_cmd in fuse.yaml) it
+// pipes the prompt into the agent command, validates the returned resolution
+// (non-empty, no markers, parses), and with --apply writes it to the
+// conflicted file.
 func cmdResolve(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: fuse resolve <conflict-file>")
+	fs := flag.NewFlagSet("resolve", flag.ExitOnError)
+	agent := fs.String("agent", "", "shell command reading the prompt on stdin and writing the resolved file to stdout (e.g. \"claude -p\")")
+	apply := fs.Bool("apply", false, "write the validated resolution to the conflicted file")
+	var promptPath string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		promptPath = args[0]
+		args = args[1:]
+	}
+	_ = fs.Parse(args)
+	if fs.NArg() > 0 {
+		promptPath = fs.Arg(0)
+	}
+	if promptPath == "" {
+		fmt.Fprintln(os.Stderr, "usage: fuse resolve <conflict-file> [--agent <cmd>] [--apply]")
 		return 2
 	}
-	data, err := os.ReadFile(args[0])
+	prompt, err := os.ReadFile(promptPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	fmt.Println(string(data))
+
+	cmdStr := *agent
+	if cmdStr == "" {
+		cmdStr = loadConfig().Resolve.AgentCmd
+	}
+	if cmdStr == "" {
+		// Manual mode: print the prompt for copy/paste into any agent.
+		fmt.Println(string(prompt))
+		return 0
+	}
+
+	target := promptTargetFile(prompt)
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "fuse resolve: prompt has no '- **File:**' line; cannot locate the conflicted file")
+		return 2
+	}
+
+	fmt.Fprintf(os.Stderr, "fuse resolve: running agent for %s\n", target)
+	agentCmd := newShellCmd(cmdStr)
+	agentCmd.Stdin = strings.NewReader(string(prompt))
+	agentCmd.Stderr = os.Stderr
+	out, err := agentCmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fuse resolve: agent failed: %v\n", err)
+		return 2
+	}
+	resolved := stripCodeFences(out)
+	if err := merge.ValidateResolution(target, resolved); err != nil {
+		fmt.Fprintf(os.Stderr, "fuse resolve: rejected agent output: %v\n", err)
+		return 1
+	}
+
+	if !*apply {
+		fmt.Print(string(resolved))
+		fmt.Fprintf(os.Stderr, "\nfuse resolve: resolution validated (use --apply to write %s)\n", target)
+		return 0
+	}
+	if err := os.WriteFile(target, resolved, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "fuse resolve: cannot write %s: %v\n", target, err)
+		return 2
+	}
+	fmt.Fprintf(os.Stderr, "fuse resolve: wrote %s — review the change, then `git add %s`\n", target, target)
 	return 0
+}
+
+// promptTargetFile extracts the conflicted file path from the handoff
+// prompt's `- **File:** <path>` summary line.
+func promptTargetFile(prompt []byte) string {
+	for _, line := range strings.Split(string(prompt), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(trimmed, "- **File:**"); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
+}
+
+// stripCodeFences removes a single wrapping markdown code fence if the agent
+// returned one despite instructions.
+func stripCodeFences(out []byte) []byte {
+	s := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(s, "```") {
+		return out
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) < 2 || strings.TrimSpace(lines[len(lines)-1]) != "```" {
+		return out
+	}
+	return []byte(strings.Join(lines[1:len(lines)-1], "\n") + "\n")
 }
 
 func cmdCheck(args []string) int {

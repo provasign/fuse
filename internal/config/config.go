@@ -13,9 +13,17 @@ type Config struct {
 	Version     int          `yaml:"version"`
 	GroveURL    string       `yaml:"grove_url"`
 	GroveBinary string       `yaml:"grove_binary"`
-	Merge       MergeConfig  `yaml:"merge"`
-	Git         GitConfig    `yaml:"git"`
-	Server      ServerConfig `yaml:"server"`
+	Merge       MergeConfig   `yaml:"merge"`
+	Git         GitConfig     `yaml:"git"`
+	Server      ServerConfig  `yaml:"server"`
+	Resolve     ResolveConfig `yaml:"resolve"`
+}
+
+// ResolveConfig controls `fuse resolve` agent integration.
+type ResolveConfig struct {
+	// AgentCmd is a shell command that reads a conflict prompt on stdin and
+	// writes the complete resolved file to stdout (e.g. "claude -p").
+	AgentCmd string `yaml:"agent_cmd"`
 }
 
 type MergeConfig struct {
