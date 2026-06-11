@@ -1,0 +1,91 @@
+name: 'Fuse Semantic Merge'
+description: >-
+  Merge a base ref into the current branch with fuse as the git merge driver:
+  symbol-aware auto-resolution for the conflicts that shouldn't exist, with
+  AI-ready handoff prompts for the ones that remain.
+branding:
+  icon: 'git-merge'
+  color: 'purple'
+
+inputs:
+  version:
+    description: 'fuse release tag to install (default: latest)'
+    required: false
+    default: ''
+  base-ref:
+    description: >-
+      Ref to merge into the current checkout. Defaults to
+      origin/$GITHUB_BASE_REF on pull_request events, origin/main otherwise.
+    required: false
+    default: ''
+  push:
+    description: >-
+      Push the resolved merge commit back to the current branch when the
+      merge completes cleanly. Requires `permissions: contents: write` and a
+      checkout of the real branch (not the detached PR merge ref).
+    required: false
+    default: 'false'
+
+outputs:
+  resolved:
+    description: '"true" when the merge completed without conflicts'
+    value: ${{ steps.merge.outputs.resolved }}
+  conflicted:
+    description: 'Space-separated list of files still in conflict'
+    value: ${{ steps.merge.outputs.conflicted }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install fuse
+      shell: bash
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/provasign/fuse/main/install.sh -o /tmp/fuse-install.sh
+        VERSION="${{ inputs.version }}" INSTALL_DIR="$HOME/.fuse-bin" bash /tmp/fuse-install.sh
+        echo "$HOME/.fuse-bin" >> "$GITHUB_PATH"
+
+    - name: Register fuse as merge driver
+      shell: bash
+      run: |
+        git config merge.fuse.name "Fuse semantic merge driver"
+        git config merge.fuse.driver "fuse merge %O %A %B %P"
+        # Repo-local attributes that never touch the working tree.
+        mkdir -p "$(git rev-parse --git-dir)/info"
+        for p in go ts tsx js jsx mjs cjs py java rs json yaml yml toml; do
+          echo "*.${p} merge=fuse"
+        done >> "$(git rev-parse --git-dir)/info/attributes"
+
+    - name: Merge base ref
+      id: merge
+      shell: bash
+      run: |
+        set +e
+        BASE="${{ inputs.base-ref }}"
+        if [ -z "$BASE" ]; then
+          BASE="origin/${GITHUB_BASE_REF:-main}"
+        fi
+        git fetch origin --quiet
+        git -c user.name=fuse-bot \
+            -c user.email=fuse-bot@users.noreply.github.com \
+            merge --no-edit "$BASE"
+        status=$?
+        if [ "$status" -eq 0 ]; then
+          echo "resolved=true" >> "$GITHUB_OUTPUT"
+          echo "conflicted=" >> "$GITHUB_OUTPUT"
+          echo "fuse: merge of $BASE completed cleanly"
+          exit 0
+        fi
+        conflicted=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+        echo "resolved=false" >> "$GITHUB_OUTPUT"
+        echo "conflicted=${conflicted}" >> "$GITHUB_OUTPUT"
+        echo "fuse: unresolved conflicts in: ${conflicted}"
+        gitdir="$(git rev-parse --git-dir)"
+        if ls "${gitdir}"/fuse/conflict-*.md >/dev/null 2>&1; then
+          echo "fuse: AI handoff prompts written under ${gitdir}/fuse/ — feed them to an agent with 'fuse resolve <prompt> --agent <cmd> --apply'"
+        fi
+        exit 1
+
+    - name: Push resolved merge
+      if: ${{ inputs.push == 'true' && steps.merge.outputs.resolved == 'true' }}
+      shell: bash
+      run: git push origin HEAD

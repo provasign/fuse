@@ -120,6 +120,38 @@ Set `resolve.agent_cmd` in `fuse.yaml` to make `--agent` the default.
 
 ---
 
+## GitHub Action
+
+Merge drivers are local-only, but agent PR conflicts live on the server. The
+bundled composite action keeps agent branches mergeable: it installs fuse,
+registers the driver (via `.git/info/attributes` — nothing in your tree),
+merges the base branch into the PR branch, and optionally pushes the result.
+
+```yaml
+name: fuse-merge
+on: pull_request
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: provasign/fuse@main
+        with:
+          push: 'true'
+```
+
+When fuse can't resolve everything, the job fails with the list of conflicted
+files and AI handoff prompts under `.git/fuse/` — pipe those into
+`fuse resolve --agent` from a follow-up step if you want full automation.
+
+---
+
 ## Why not mergiraf?
 
 [Mergiraf](https://mergiraf.org) is an excellent structured merge driver, and
