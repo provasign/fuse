@@ -57,6 +57,8 @@ func Run(argv []string) int {
 		return cmdDeps(argv[1:])
 	case "resolve":
 		return cmdResolve(argv[1:])
+	case "bench":
+		return cmdBench(argv[1:])
 	case "serve":
 		return cmdServe(argv[1:])
 	default:
@@ -80,6 +82,7 @@ Commands:
   fuse impact <file-or-symbol>               Show blast radius via Grove
   fuse deps <file>                           Show dependencies via Grove
   fuse config                                Print resolved configuration
+  fuse bench [repo] [--limit N] [--json]     Replay historical merges and score auto-resolution
   fuse serve [--port 9999]                   Start HTTP API
   fuse version                               Show version
 `)
