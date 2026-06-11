@@ -3,9 +3,20 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// skipIfNoPOSIXShell skips agent-invocation tests on Windows: the fake
+// agents are POSIX shell one-liners, and `fuse resolve --agent` itself is
+// documented as POSIX-shell only for now (see NEXT_STEPS.md §5).
+func skipIfNoPOSIXShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fuse resolve --agent requires a POSIX shell")
+	}
+}
 
 func writeResolveFixture(t *testing.T) (promptPath, targetPath string) {
 	t.Helper()
@@ -23,6 +34,7 @@ func writeResolveFixture(t *testing.T) (promptPath, targetPath string) {
 }
 
 func TestResolveAgentApplyWritesValidatedFile(t *testing.T) {
+	skipIfNoPOSIXShell(t)
 	promptPath, targetPath := writeResolveFixture(t)
 	// Fake agent: emits a valid resolution wrapped in fences (which must be
 	// stripped) regardless of the prompt on stdin.
@@ -43,6 +55,7 @@ func TestResolveAgentApplyWritesValidatedFile(t *testing.T) {
 }
 
 func TestResolveAgentRejectsInvalidOutput(t *testing.T) {
+	skipIfNoPOSIXShell(t)
 	promptPath, targetPath := writeResolveFixture(t)
 	before, _ := os.ReadFile(targetPath)
 
@@ -57,6 +70,7 @@ func TestResolveAgentRejectsInvalidOutput(t *testing.T) {
 }
 
 func TestResolveAgentRejectsRemainingMarkers(t *testing.T) {
+	skipIfNoPOSIXShell(t)
 	promptPath, _ := writeResolveFixture(t)
 	agent := `cat > /dev/null; printf 'package x\n<<<<<<< HEAD\nfunc A() {}\n>>>>>>> theirs\n'`
 	if code := Run([]string{"resolve", promptPath, "--agent", agent}); code == 0 {
