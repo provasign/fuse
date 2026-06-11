@@ -1,6 +1,10 @@
 package strategies
 
 import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -9,6 +13,55 @@ type LineMergeResult struct {
 	Merged      string
 	HasConflict bool
 	Confidence  float64
+}
+
+// GitLineMerge performs the line-level three-way merge with byte-for-byte
+// git semantics by invoking `git merge-file` (always present when fuse runs
+// as a merge driver). It falls back to the internal LCS merge when git is
+// unavailable. This is the baseline fuse must never do worse than.
+func GitLineMerge(base, ours, theirs string) LineMergeResult {
+	if ours == theirs {
+		return LineMergeResult{Merged: ours, Confidence: 1.0}
+	}
+	if base == ours {
+		return LineMergeResult{Merged: theirs, Confidence: 0.95}
+	}
+	if base == theirs {
+		return LineMergeResult{Merged: ours, Confidence: 0.95}
+	}
+	if out, ok := gitMergeFile(base, ours, theirs); ok {
+		return out
+	}
+	return LineMerge(base, ours, theirs)
+}
+
+func gitMergeFile(base, ours, theirs string) (LineMergeResult, bool) {
+	dir, err := os.MkdirTemp("", "fuse-merge-")
+	if err != nil {
+		return LineMergeResult{}, false
+	}
+	defer os.RemoveAll(dir)
+	bf := filepath.Join(dir, "base")
+	of := filepath.Join(dir, "ours")
+	tf := filepath.Join(dir, "theirs")
+	for p, c := range map[string]string{bf: base, of: ours, tf: theirs} {
+		if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
+			return LineMergeResult{}, false
+		}
+	}
+	cmd := exec.Command("git", "merge-file", "-p",
+		"-L", "HEAD", "-L", "base", "-L", "theirs", of, bf, tf)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err = cmd.Run()
+	if err == nil {
+		return LineMergeResult{Merged: out.String(), Confidence: 0.7}, true
+	}
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() > 0 {
+		// Exit code is the number of conflicts; markers are in the output.
+		return LineMergeResult{Merged: out.String(), HasConflict: true, Confidence: 0.0}, true
+	}
+	return LineMergeResult{}, false // git missing or hard failure
 }
 
 // LineMerge is the fallback three-way merge used when language-aware merging

@@ -4,6 +4,8 @@ package merge
 import (
 	"context"
 	"fmt"
+	goparser "go/parser"
+	"go/token"
 	"sort"
 	"strings"
 	"time"
@@ -93,8 +95,20 @@ func (im *IntelliMerge) Merge(
 		return res, nil
 	}
 
-	// Config formats short-circuit to deep merge.
+	// Config formats: try the git-equivalent line merge first — it preserves
+	// the author's formatting, comments, and key order exactly. The structural
+	// deep merge (which re-serializes the document) only runs on conflict.
 	if parser.IsConfig(lang) {
+		if lineOut := mstrat.GitLineMerge(string(baseContent), string(oursContent), string(theirsContent)); !lineOut.HasConflict {
+			res.MergedContent = lineOut.Merged
+			res.Strategy = core.StrategyLine
+			res.Confidence = 0.95
+			res.ConflictType = core.ConflictConfigurational
+			res.Severity = core.SeverityLow
+			res.Stats.TimingMs = time.Since(started).Milliseconds()
+			res.AuditEntry = im.auditEntryFor(res)
+			return res, nil
+		}
 		out := mstrat.ConfigMerge(lang, string(baseContent), string(oursContent), string(theirsContent))
 		res.MergedContent = out.Merged
 		res.HasConflict = out.HasConflict
@@ -113,7 +127,7 @@ func (im *IntelliMerge) Merge(
 	// Unsupported AST language: line-level fallback only.
 	strategy := im.Registry.Get(lang)
 	if strategy == nil || !parser.IsAST(lang) {
-		out := mstrat.LineMerge(string(baseContent), string(oursContent), string(theirsContent))
+		out := mstrat.GitLineMerge(string(baseContent), string(oursContent), string(theirsContent))
 		res.MergedContent = out.Merged
 		res.HasConflict = out.HasConflict
 		res.Confidence = out.Confidence
@@ -135,7 +149,7 @@ func (im *IntelliMerge) Merge(
 
 	// If any side fails to parse, fall back to line merge.
 	if errB != nil || errO != nil || errT != nil || baseTree == nil || oursTree == nil || theirsTree == nil {
-		out := mstrat.LineMerge(string(baseContent), string(oursContent), string(theirsContent))
+		out := mstrat.GitLineMerge(string(baseContent), string(oursContent), string(theirsContent))
 		res.MergedContent = out.Merged
 		res.HasConflict = out.HasConflict
 		res.Confidence = out.Confidence * 0.8 // penalty for falling back
@@ -166,7 +180,44 @@ func (im *IntelliMerge) Merge(
 		res.BreakingChanges = breaking
 	}
 
-	// Phase 6 — Symbol + import merge. Merge operates on top-level symbols
+	// Phase 6a — Git-equivalent line merge first. When it is clean and the
+	// output parses, ship it: it preserves byte-level fidelity, and fuse must
+	// never do worse than git. The symbol pipeline takes over only where
+	// line-level merging fails — which is exactly where it adds value.
+	lineOut := mstrat.GitLineMerge(string(baseContent), string(oursContent), string(theirsContent))
+	if !lineOut.HasConflict && im.parsesClean(lang, []byte(lineOut.Merged)) {
+		res.MergedContent = lineOut.Merged
+		res.Strategy = core.StrategyLine
+		res.Confidence = 0.95
+		res.ConflictType = core.ConflictIncremental
+		res.Severity = core.SeverityLow
+		for _, b := range breaking {
+			res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("[breaking %s] %s", b.Severity, b.Message))
+		}
+		res.Stats.TimingMs = time.Since(started).Milliseconds()
+		res.AuditEntry = im.auditEntryFor(res)
+		return res, nil
+	}
+
+	// Phase 6a' — internal LCS line merge. Its hunking is finer-grained than
+	// git merge-file and resolves adjacent-but-disjoint edits git treats as
+	// conflicting. Consulted only when git's merge failed, so it can only
+	// improve on the baseline; gated by a clean parse.
+	if lcs := mstrat.LineMerge(string(baseContent), string(oursContent), string(theirsContent)); !lcs.HasConflict && im.parsesClean(lang, []byte(lcs.Merged)) {
+		res.MergedContent = lcs.Merged
+		res.Strategy = core.StrategyLine
+		res.Confidence = 0.85
+		res.ConflictType = core.ConflictIncremental
+		res.Severity = core.SeverityLow
+		for _, b := range breaking {
+			res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("[breaking %s] %s", b.Severity, b.Message))
+		}
+		res.Stats.TimingMs = time.Since(started).Milliseconds()
+		res.AuditEntry = im.auditEntryFor(res)
+		return res, nil
+	}
+
+	// Phase 6b — Symbol + import merge. Merge operates on top-level symbols
 	// only: container bodies (classes) include their children, and nested
 	// spans would overlap during reconstruction. Breaking-change analysis
 	// above still sees the full nested symbol set.
@@ -205,6 +256,7 @@ func (im *IntelliMerge) Merge(
 		string(oursContent), topOurs,
 		smerge.Merged, imerge.Merged, oursImps,
 		lang,
+		string(theirsContent), topTheirs,
 	)
 	res.MergedContent = merged
 	res.Strategy = core.StrategySymbol
@@ -217,19 +269,21 @@ func (im *IntelliMerge) Merge(
 
 	// Post-merge validation gate: a clean symbol merge must still parse.
 	// Reconstruction is line-span based, so if it introduced syntax errors
-	// the inputs didn't have, the merge is corrupt — discard it and fall
-	// back to a line-level merge of the whole file. Skipped when conflict
-	// markers are present (those intentionally break syntax).
+	// the inputs didn't have, the merge is corrupt — discard it and surface
+	// the line-level result (with its conflict markers) instead. Skipped when
+	// conflict markers are present (those intentionally break syntax).
 	if !res.HasConflict {
 		inputsClean := !treeHasError(baseTree) && !treeHasError(oursTree) && !treeHasError(theirsTree)
 		if inputsClean && !im.parsesClean(lang, []byte(merged)) {
-			out := mstrat.LineMerge(string(baseContent), string(oursContent), string(theirsContent))
-			res.MergedContent = out.Merged
-			res.HasConflict = out.HasConflict
-			res.Confidence = out.Confidence * 0.8
+			res.MergedContent = lineOut.Merged
+			res.HasConflict = true
+			res.Confidence = lineOut.Confidence * 0.8
 			res.Strategy = core.StrategyLine
-			res.Diagnostics = append(res.Diagnostics,
-				"post-merge validation failed: reconstructed file did not parse cleanly; used line-level fallback")
+			diag := "post-merge validation failed: reconstructed file did not parse cleanly; surfaced line-level conflict instead"
+			if !lineOut.HasConflict {
+				diag = "post-merge validation failed on both the symbol and line merges; manual review required"
+			}
+			res.Diagnostics = append(res.Diagnostics, diag)
 		}
 	}
 	// If confidence drops below threshold, mark for handoff.
@@ -264,8 +318,17 @@ func treeHasError(t *sitter.Tree) bool {
 	return root == nil || root.HasError()
 }
 
-// parsesClean reports whether src parses without syntax errors.
+// parsesClean reports whether src parses without syntax errors. Go addition-
+// ally goes through the stdlib parser: tree-sitter's Go grammar tolerates
+// constructs gofmt rejects (e.g. a `const` keyword repeated inside a const
+// block), and the gate exists precisely to catch those.
 func (im *IntelliMerge) parsesClean(lang core.LanguageKey, src []byte) bool {
+	if lang == core.LangGo {
+		fset := token.NewFileSet()
+		if _, err := goparser.ParseFile(fset, "merged.go", src, 0); err != nil {
+			return false
+		}
+	}
 	t, err := im.Parser.Parse(lang, src)
 	if err != nil || t == nil {
 		return false
@@ -335,6 +398,8 @@ func reconstructFile(
 	mergedImps []core.ImportStatement,
 	oursImps []core.ImportStatement,
 	lang core.LanguageKey,
+	theirsContent string,
+	theirsSyms []core.SymbolData,
 ) string {
 	oursLines := strings.Split(oursContent, "\n")
 
@@ -349,22 +414,35 @@ func reconstructFile(
 
 	mergedByKey := make(map[string]core.SymbolData, len(mergedSyms))
 	for _, s := range mergedSyms {
-		mergedByKey[s.QualifiedName] = s
+		mergedByKey[mstrat.MergeKey(s)] = s
 	}
 
 	usedKeys := map[string]bool{}
 	for _, s := range oursSyms {
-		merged, ok := mergedByKey[s.QualifiedName]
+		merged, ok := mergedByKey[mstrat.MergeKey(s)]
 		if !ok {
 			// symbol was dropped in merge
-			spans = append(spans, span{start: s.Span.Start, end: s.Span.End, kind: "skip", key: s.QualifiedName})
+			spans = append(spans, span{start: s.Span.Start, end: s.Span.End, kind: "skip", key: mstrat.MergeKey(s)})
 			continue
 		}
-		spans = append(spans, span{start: s.Span.Start, end: s.Span.End, body: merged.Body, kind: "symbol", key: s.QualifiedName})
-		usedKeys[s.QualifiedName] = true
+		usedKeys[mstrat.MergeKey(s)] = true
+		if merged.Body == s.Body {
+			// Unchanged relative to ours — leave the original lines alone.
+			// Body can carry a synthetic standalone-decl form (Go const/var
+			// group members), so substituting it would mangle formatting.
+			continue
+		}
+		body := adaptBodyToContext(merged.Body, oursLines, s.Span.Start, lang)
+		spans = append(spans, span{start: s.Span.Start, end: s.Span.End, body: body, kind: "symbol", key: mstrat.MergeKey(s)})
 	}
-	for _, i := range oursImps {
-		spans = append(spans, span{start: i.Line, end: i.Line, kind: "import"})
+	// If the merged import set is identical to ours, keep ours' original
+	// import lines (no re-rendering: preserves single-import style, grouping,
+	// comments).
+	keepOursImports := sameImportSet(oursImps, mergedImps)
+	if !keepOursImports {
+		for _, i := range oursImps {
+			spans = append(spans, span{start: i.Line, end: i.Line, kind: "import"})
+		}
 	}
 
 	// Sort spans by start (wider first on ties), then drop any span that
@@ -386,10 +464,55 @@ func reconstructFile(
 	}
 	spans = kept
 
+	// Symbols added by theirs are inserted near their original neighbors:
+	// right after the symbol that precedes them in the theirs buffer when
+	// that neighbor exists in ours, carrying contiguous leading comment lines
+	// along. Symbols without a resolvable anchor are appended at the end.
+	theirsLines := strings.Split(theirsContent, "\n")
+	oursSpanByKey := make(map[string]core.LineRange, len(oursSyms))
+	for _, s := range oursSyms {
+		oursSpanByKey[mstrat.MergeKey(s)] = s.Span
+	}
+	sortedTheirs := make([]core.SymbolData, len(theirsSyms))
+	copy(sortedTheirs, theirsSyms)
+	sort.SliceStable(sortedTheirs, func(i, j int) bool { return sortedTheirs[i].Span.Start < sortedTheirs[j].Span.Start })
+	theirsPos := make(map[string]int, len(sortedTheirs))
+	for i, s := range sortedTheirs {
+		theirsPos[mstrat.MergeKey(s)] = i
+	}
+	insertAfter := map[int][]string{}
+	var trailing []string
+	for _, s := range mergedSyms {
+		k := mstrat.MergeKey(s)
+		if usedKeys[k] {
+			continue
+		}
+		text := theirsSymbolText(theirsLines, s)
+		anchor := 0
+		if pos, ok := theirsPos[k]; ok {
+			for j := pos - 1; j >= 0; j-- {
+				if span, ok2 := oursSpanByKey[mstrat.MergeKey(sortedTheirs[j])]; ok2 {
+					anchor = span.End
+					break
+				}
+			}
+		}
+		if anchor > 0 {
+			insertAfter[anchor] = append(insertAfter[anchor], text)
+		} else {
+			trailing = append(trailing, text)
+		}
+	}
+
 	importBlock := renderImportBlock(mergedImps, lang)
-	importsEmitted := false
+	importsEmitted := keepOursImports
 
 	var out []string
+	flushInserts := func(afterLine int) {
+		for _, t := range insertAfter[afterLine] {
+			out = append(out, "", t)
+		}
+	}
 	idx := 0
 	for lineNo := 1; lineNo <= len(oursLines); lineNo++ {
 		if idx < len(spans) && spans[idx].start == lineNo {
@@ -410,9 +533,11 @@ func reconstructFile(
 			}
 			lineNo = s.end
 			idx++
+			flushInserts(lineNo)
 			continue
 		}
 		out = append(out, oursLines[lineNo-1])
+		flushInserts(lineNo)
 	}
 
 	// If we never had an import line on ours but merged has imports → insert
@@ -421,16 +546,76 @@ func reconstructFile(
 		out = injectImportsAfterPackageDecl(out, importBlock, lang)
 	}
 
-	// Append any symbols from merged that ours didn't have (added by theirs).
-	for _, s := range mergedSyms {
-		if usedKeys[s.QualifiedName] {
-			continue
-		}
-		out = append(out, "")
-		out = append(out, s.Body)
+	// Symbols with no positional anchor (added by theirs in a region ours
+	// doesn't share) go at the end.
+	for _, t := range trailing {
+		out = append(out, "", t)
 	}
 
 	return strings.Join(out, "\n")
+}
+
+// theirsSymbolText returns the text to insert for a theirs-added symbol,
+// expanded to include contiguous leading comment lines from the theirs
+// buffer (symbol spans exclude doc comments). Falls back to the merged Body
+// when the span doesn't reproduce the body — e.g. synthetic conflict-marker
+// bodies.
+func theirsSymbolText(theirsLines []string, s core.SymbolData) string {
+	if s.Span.Start < 1 || s.Span.End > len(theirsLines) || s.Span.Start > s.Span.End {
+		return s.Body
+	}
+	spanText := strings.Join(theirsLines[s.Span.Start-1:s.Span.End], "\n")
+	if strings.TrimSpace(spanText) != strings.TrimSpace(s.Body) {
+		return s.Body
+	}
+	start := s.Span.Start
+	for start-1 >= 1 {
+		t := strings.TrimSpace(theirsLines[start-2])
+		if t != "" && (strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") ||
+			strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*")) {
+			start--
+			continue
+		}
+		break
+	}
+	return strings.Join(theirsLines[start-1:s.Span.End], "\n")
+}
+
+// adaptBodyToContext strips the synthetic decl keyword astkit prepends to Go
+// const/var/type group members. Their Body is a standalone declaration while
+// their span covers only the bare spec inside a `const (` / `var (` / `type (`
+// block; substituting the standalone form verbatim would duplicate the
+// keyword inside the block.
+func adaptBodyToContext(body string, oursLines []string, startLine int, lang core.LanguageKey) string {
+	if lang != core.LangGo || startLine < 1 || startLine > len(oursLines) {
+		return body
+	}
+	orig := strings.TrimSpace(oursLines[startLine-1])
+	for _, kw := range []string{"const ", "var ", "type "} {
+		if strings.HasPrefix(body, kw) && !strings.HasPrefix(orig, kw) {
+			return strings.TrimPrefix(body, kw)
+		}
+	}
+	return body
+}
+
+// sameImportSet reports whether a and b contain the same (alias, path) pairs.
+func sameImportSet(a, b []core.ImportStatement) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	count := make(map[string]int, len(a))
+	for _, i := range a {
+		count[i.Alias+"\x00"+i.Path]++
+	}
+	for _, i := range b {
+		k := i.Alias + "\x00" + i.Path
+		count[k]--
+		if count[k] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // renderImportBlock renders merged imports in the language's typical form.

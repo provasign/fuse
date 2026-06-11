@@ -228,12 +228,23 @@ func TopLevelSymbols(syms []core.SymbolData) []core.SymbolData {
 	return out
 }
 
-// SymbolsToMap builds a key→SymbolData map from a slice. Later entries with
-// the same key win.
+// MergeKey identifies a symbol within one file for three-way matching.
+// QualifiedName alone collides in Go — method `(c *Context) Negotiate` and
+// `type Negotiate` both carry QualifiedName "Negotiate" — so the parent /
+// receiver name disambiguates.
+func MergeKey(s core.SymbolData) string {
+	if s.ParentName != "" && !strings.HasPrefix(s.QualifiedName, s.ParentName+".") {
+		return s.ParentName + "." + s.QualifiedName
+	}
+	return s.QualifiedName
+}
+
+// SymbolsToMap builds a MergeKey→SymbolData map from a slice. Later entries
+// with the same key win.
 func SymbolsToMap(syms []core.SymbolData) map[string]core.SymbolData {
 	out := make(map[string]core.SymbolData, len(syms))
 	for _, s := range syms {
-		out[s.QualifiedName] = s
+		out[MergeKey(s)] = s
 	}
 	return out
 }
