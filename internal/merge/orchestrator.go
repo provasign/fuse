@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	sitter "github.com/smacker/go-tree-sitter"
+
 	"github.com/provasign/fuse/internal/core"
 	"github.com/provasign/fuse/internal/languages"
 	"github.com/provasign/fuse/internal/merge/analysis"
@@ -164,11 +166,17 @@ func (im *IntelliMerge) Merge(
 		res.BreakingChanges = breaking
 	}
 
-	// Phase 6 — Symbol + import merge.
+	// Phase 6 — Symbol + import merge. Merge operates on top-level symbols
+	// only: container bodies (classes) include their children, and nested
+	// spans would overlap during reconstruction. Breaking-change analysis
+	// above still sees the full nested symbol set.
+	topBase := mstrat.TopLevelSymbols(baseSyms)
+	topOurs := mstrat.TopLevelSymbols(oursSyms)
+	topTheirs := mstrat.TopLevelSymbols(theirsSyms)
 	smerge := mstrat.SymbolMerge(
-		mstrat.SymbolsToMap(baseSyms),
-		mstrat.SymbolsToMap(oursSyms),
-		mstrat.SymbolsToMap(theirsSyms),
+		mstrat.SymbolsToMap(topBase),
+		mstrat.SymbolsToMap(topOurs),
+		mstrat.SymbolsToMap(topTheirs),
 	)
 	imerge := mstrat.ImportMerge(baseImps, oursImps, theirsImps)
 	res.Stats.AutoMerged = len(smerge.Merged) - len(smerge.Conflicts)
@@ -194,7 +202,7 @@ func (im *IntelliMerge) Merge(
 	// content (the file shell — package decl, comments at top, etc.) is taken
 	// from ours to preserve formatting.
 	merged := reconstructFile(
-		string(oursContent), oursSyms,
+		string(oursContent), topOurs,
 		smerge.Merged, imerge.Merged, oursImps,
 		lang,
 	)
@@ -205,6 +213,24 @@ func (im *IntelliMerge) Merge(
 	if len(smerge.Conflicts) > 0 {
 		res.HasConflict = true
 		res.Conflicts = smerge.Conflicts
+	}
+
+	// Post-merge validation gate: a clean symbol merge must still parse.
+	// Reconstruction is line-span based, so if it introduced syntax errors
+	// the inputs didn't have, the merge is corrupt — discard it and fall
+	// back to a line-level merge of the whole file. Skipped when conflict
+	// markers are present (those intentionally break syntax).
+	if !res.HasConflict {
+		inputsClean := !treeHasError(baseTree) && !treeHasError(oursTree) && !treeHasError(theirsTree)
+		if inputsClean && !im.parsesClean(lang, []byte(merged)) {
+			out := mstrat.LineMerge(string(baseContent), string(oursContent), string(theirsContent))
+			res.MergedContent = out.Merged
+			res.HasConflict = out.HasConflict
+			res.Confidence = out.Confidence * 0.8
+			res.Strategy = core.StrategyLine
+			res.Diagnostics = append(res.Diagnostics,
+				"post-merge validation failed: reconstructed file did not parse cleanly; used line-level fallback")
+		}
 	}
 	// If confidence drops below threshold, mark for handoff.
 	if res.Confidence < im.HandoffThreshold {
@@ -229,9 +255,28 @@ func closeTree(t any) {
 	}
 }
 
+// treeHasError reports whether the parse tree contains syntax errors.
+func treeHasError(t *sitter.Tree) bool {
+	if t == nil {
+		return true
+	}
+	root := t.RootNode()
+	return root == nil || root.HasError()
+}
+
+// parsesClean reports whether src parses without syntax errors.
+func (im *IntelliMerge) parsesClean(lang core.LanguageKey, src []byte) bool {
+	t, err := im.Parser.Parse(lang, src)
+	if err != nil || t == nil {
+		return false
+	}
+	defer t.Close()
+	return !treeHasError(t)
+}
+
 func combineConfidence(a, b float64) float64 {
-	// geometric mean to reflect that low confidence in either factor lowers
-	// the joint confidence.
+	// arithmetic mean of the two factors; zero confidence in either factor
+	// zeroes the joint confidence.
 	if a <= 0 || b <= 0 {
 		return 0
 	}
@@ -322,8 +367,24 @@ func reconstructFile(
 		spans = append(spans, span{start: i.Line, end: i.Line, kind: "import"})
 	}
 
-	// Sort spans by start.
-	sort.SliceStable(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+	// Sort spans by start (wider first on ties), then drop any span that
+	// overlaps an earlier one. Overlapping substitution would duplicate or
+	// corrupt output; the contained content is already inside the kept span.
+	sort.SliceStable(spans, func(i, j int) bool {
+		if spans[i].start == spans[j].start {
+			return spans[i].end > spans[j].end
+		}
+		return spans[i].start < spans[j].start
+	})
+	kept := spans[:0]
+	maxEnd := 0
+	for _, s := range spans {
+		if s.start > maxEnd {
+			kept = append(kept, s)
+			maxEnd = s.end
+		}
+	}
+	spans = kept
 
 	importBlock := renderImportBlock(mergedImps, lang)
 	importsEmitted := false

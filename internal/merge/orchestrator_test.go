@@ -107,8 +107,12 @@ func TestMergePythonClassWithIndependentMethodChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// We don't assert no-conflict here because reconstruction of Python class
-	// internals is complex — we just want the pipeline to record stats.
+	if res.HasConflict {
+		t.Fatalf("expected clean merge via symbol-body line merge, got conflict:\n%s", res.MergedContent)
+	}
+	if !strings.Contains(res.MergedContent, "return 10") || !strings.Contains(res.MergedContent, "return 20") {
+		t.Errorf("expected both method edits in merged output:\n%s", res.MergedContent)
+	}
 	if res.Stats.SymbolsBase == 0 || res.Stats.SymbolsOurs == 0 || res.Stats.SymbolsTheirs == 0 {
 		t.Errorf("missing symbol stats: %+v", res.Stats)
 	}

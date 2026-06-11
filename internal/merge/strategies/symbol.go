@@ -85,6 +85,21 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 			confSum += 0.95
 			confN++
 		case ActionConflict:
+			// Before declaring a conflict, attempt a line-level three-way
+			// merge of the symbol body. Two-sided edits to different regions
+			// of one symbol — different methods of the same class, different
+			// branches of a large function — resolve cleanly here.
+			if basePtr != nil && oursPtr != nil && theirsPtr != nil {
+				lm := LineMerge(basePtr.Body, oursPtr.Body, theirsPtr.Body)
+				if !lm.HasConflict {
+					resolved := *oursPtr
+					resolved.Body = lm.Merged
+					merged = append(merged, resolved)
+					confSum += 0.70
+					confN++
+					continue
+				}
+			}
 			conflicts = append(conflicts, core.SymbolConflict{
 				Key:    k,
 				Base:   deref(basePtr),
@@ -181,6 +196,35 @@ func orderedKeys(primary, secondary, tertiary map[string]core.SymbolData) []stri
 	appendOrdered(primary)
 	appendOrdered(secondary)
 	appendOrdered(tertiary)
+	return out
+}
+
+// TopLevelSymbols filters out symbols whose spans are contained within
+// another symbol's span (class methods, nested functions). Merging happens at
+// top-level granularity: container bodies already include their children, and
+// overlapping spans would corrupt file reconstruction. Output is ordered by
+// span start.
+func TopLevelSymbols(syms []core.SymbolData) []core.SymbolData {
+	if len(syms) <= 1 {
+		return syms
+	}
+	sorted := make([]core.SymbolData, len(syms))
+	copy(sorted, syms)
+	// Start ascending; on ties the wider span first so containers win.
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Span.Start == sorted[j].Span.Start {
+			return sorted[i].Span.End > sorted[j].Span.End
+		}
+		return sorted[i].Span.Start < sorted[j].Span.Start
+	})
+	out := make([]core.SymbolData, 0, len(sorted))
+	maxEnd := 0
+	for _, s := range sorted {
+		if s.Span.Start > maxEnd {
+			out = append(out, s)
+			maxEnd = s.Span.End
+		}
+	}
 	return out
 }
 
