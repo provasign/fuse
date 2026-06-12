@@ -148,13 +148,17 @@ Current honest numbers on gin's history: 100% parity with git's auto-merges;
 4/16 git-conflicted files resolved, 3 byte-identical to human. Headroom, in
 expected-value order:
 
-1. **Bench corpus expansion** — TS/Python-heavy repos with merge-commit
-   history; publish per-language tables in the README. Do this *first* so
-   every later change is measured against more than Go.
-2. **Rename detection** — symbol with identical/near-identical body under a
-   new name on one side + edits on the other is currently a conflict;
-   body-similarity matching turns it into a clean merge (`STRUCTURAL` class
-   actually earning its name).
+1. ✅ **Bench corpus expansion (2026-06-12)** — express + socket.io (JS),
+   flask + requests (Python) joined gin; `fuse bench` prints per-language
+   tables and the README publishes them. The corpus immediately caught a
+   parity bug (JSpec DSL behind .js extensions) — fixed: unparseable
+   inputs now merge strictly line-level, like git.
+2. ✅ **Rename detection (2026-06-12)** — rename-vs-edit now auto-merges:
+   unambiguous 1:1 name-substituted body matches pair the removed and
+   added symbol, and the editor's change is three-way merged into the
+   renamed body (conservative gates mirror Grove's GraphDiff pairing;
+   ambiguity or a colliding edit falls back to the conflict path).
+   Bench: zero regressions across all five corpus repos.
 3. **Container-aware nested merge** — today a class whose methods diverge on
    both sides is resolved by symbol-body LCS; a true nested symbol merge
    (per-method three-way inside the class shell) lifts TS/Python/Java

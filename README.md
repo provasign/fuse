@@ -73,7 +73,7 @@ code files where git conflicted):
 | [requests](https://github.com/psf/requests) | Python | 2 | 1 (50%) | 1 (100%) |
 
 And on every file git auto-merges, fuse is clean as well — **100% parity on
-all five repos** (gin 71/71, express 301/301, flask 107/107, requests 41/41,
+all five repos** (gin 73/73, express 301/301, flask 107/107, requests 41/41,
 socket.io 117/117), with fuse's auto-merge bytes matching the human result
 exactly as often as git's do.
 

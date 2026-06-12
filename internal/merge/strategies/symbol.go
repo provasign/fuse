@@ -1,6 +1,7 @@
 package strategies
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -40,9 +41,25 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 
 	used := map[string]bool{}
 
+	// Rename-aware pre-pass: a symbol renamed on one side and edited on the
+	// other looks like remove-vs-modify (a conflict) plus an unrelated
+	// addition. Pair them by name-substituted body identity and merge the
+	// edit into the renamed symbol instead.
+	renames := resolveRenames(base, ours, theirs)
+	for _, r := range renames {
+		used[r.oldKey] = true
+	}
+
 	// ordered preference: ours-order, then theirs-only, then base-only
 	for _, k := range orderedKeys(ours, theirs, base) {
 		if used[k] {
+			continue
+		}
+		if r, ok := renames[k]; ok {
+			merged = append(merged, r.resolved)
+			confSum += 0.80
+			confN++
+			used[k] = true
 			continue
 		}
 		used[k] = true
@@ -134,6 +151,94 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 		conf = 0.45
 	}
 	return SymbolMergeResult{Merged: merged, Conflicts: conflicts, Confidence: conf}
+}
+
+// resolvedRename carries one rename-with-edit resolution, keyed by the
+// renamed (new) symbol's key.
+type resolvedRename struct {
+	oldKey   string
+	resolved core.SymbolData
+}
+
+// resolveRenames detects symbols renamed on exactly one side while the other
+// side edited the original, and merges the edit into the renamed symbol.
+//
+// Pairing is conservative, mirroring Grove's GraphDiff rename detection:
+// the added symbol's body must equal the base body with the old name
+// substituted for the new one (word-boundary), kinds must match, and the
+// pairing must be unambiguous (exactly one candidate on each side). The
+// body merge itself must resolve cleanly at line level or the pair is
+// abandoned and the normal conflict path runs.
+func resolveRenames(base, ours, theirs map[string]core.SymbolData) map[string]resolvedRename {
+	out := map[string]resolvedRename{}
+	pairSide := func(renamer, editor map[string]core.SymbolData) {
+		// old: in base, gone on renamer side, modified on editor side.
+		// new: on renamer side only.
+		oldMatches := map[string][]string{} // oldKey → newKeys
+		newMatches := map[string][]string{} // newKey → oldKeys
+		for oldKey, baseSym := range base {
+			if _, stillThere := renamer[oldKey]; stillThere {
+				continue
+			}
+			edited, editorHas := editor[oldKey]
+			if !editorHas || edited.Body == baseSym.Body {
+				continue // pure delete or rename-without-edit: default actions handle it
+			}
+			if len(baseSym.Name) < 3 {
+				continue
+			}
+			for newKey, newSym := range renamer {
+				if _, inBase := base[newKey]; inBase {
+					continue
+				}
+				if _, inEditor := editor[newKey]; inEditor {
+					continue
+				}
+				if newSym.Kind != baseSym.Kind || newSym.Name == baseSym.Name || len(newSym.Name) < 3 {
+					continue
+				}
+				if renameSub(baseSym.Body, baseSym.Name, newSym.Name) != newSym.Body {
+					continue
+				}
+				oldMatches[oldKey] = append(oldMatches[oldKey], newKey)
+				newMatches[newKey] = append(newMatches[newKey], oldKey)
+			}
+		}
+		for oldKey, newKeys := range oldMatches {
+			if len(newKeys) != 1 || len(newMatches[newKeys[0]]) != 1 {
+				continue // ambiguous; leave to the conflict path
+			}
+			newKey := newKeys[0]
+			baseSym := base[oldKey]
+			newSym := renamer[newKey]
+			edited := editor[oldKey]
+			// Merge the editor's change into the renamed body: rename all
+			// three texts to the new name, then three-way line merge.
+			lm := LineMerge(
+				renameSub(baseSym.Body, baseSym.Name, newSym.Name),
+				newSym.Body,
+				renameSub(edited.Body, baseSym.Name, newSym.Name),
+			)
+			if lm.HasConflict {
+				continue
+			}
+			resolved := newSym
+			resolved.Body = lm.Merged
+			out[newKey] = resolvedRename{oldKey: oldKey, resolved: resolved}
+		}
+	}
+	pairSide(ours, theirs)
+	pairSide(theirs, ours)
+	return out
+}
+
+// renameSub replaces word-boundary occurrences of oldName with newName.
+func renameSub(body, oldName, newName string) string {
+	re, err := regexp.Compile(`\b` + regexp.QuoteMeta(oldName) + `\b`)
+	if err != nil {
+		return body
+	}
+	return re.ReplaceAllString(body, newName)
 }
 
 func getPtr(m map[string]core.SymbolData, k string) *core.SymbolData {
