@@ -12,15 +12,15 @@ type ImportMergeResult struct {
 	Confidence float64
 }
 
-// ImportMerge performs a three-way merge of import statements.
+// ImportMerge performs a true three-way merge of import statements:
 //
-//  1. Drop imports that exist in base but are absent from both ours and
-//     theirs (both sides removed them).
-//  2. Union of imports present in ours and/or theirs.
-//  3. Deduplicate by Path (case-sensitive) preferring the ours-side entry.
-//  4. Stable order: imports present in ours keep their ours-order; theirs-
-//     only imports are appended in their theirs-order. Within each group
-//     we keep insertion order.
+//	keep = (base ∩ ours ∩ theirs) ∪ (ours − base) ∪ (theirs − base)
+//
+// A base import removed on either side is removed from the result — the
+// side that kept it didn't touch it, so the removal is the only change and
+// it wins (same rule git applies to lines). New imports from either side
+// are added. Deduplicate by Path preferring the ours-side entry; stable
+// group/path ordering.
 //
 // Confidence is 1.0 if both sides produced identical sets, 0.9 otherwise.
 func ImportMerge(base, ours, theirs []core.ImportStatement) ImportMergeResult {
@@ -30,16 +30,19 @@ func ImportMerge(base, ours, theirs []core.ImportStatement) ImportMergeResult {
 
 	keep := map[string]bool{}
 	for _, imp := range ours {
+		// Base imports survive only if both sides still have them: absence
+		// on the other side is a deliberate removal that must win. (The
+		// previous union semantics resurrected one-sided removals.)
+		if basePaths[imp.Path] && !theirsPaths[imp.Path] {
+			continue
+		}
 		keep[imp.Path] = true
 	}
 	for _, imp := range theirs {
-		keep[imp.Path] = true
-	}
-	// Drop imports that base had but both sides removed.
-	for p := range basePaths {
-		if !oursPaths[p] && !theirsPaths[p] {
-			delete(keep, p)
+		if basePaths[imp.Path] && !oursPaths[imp.Path] {
+			continue
 		}
+		keep[imp.Path] = true
 	}
 
 	// Compose ordered output: ours first, then theirs-only.

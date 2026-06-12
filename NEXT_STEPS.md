@@ -159,12 +159,15 @@ expected-value order:
    renamed body (conservative gates mirror Grove's GraphDiff pairing;
    ambiguity or a colliding edit falls back to the conflict path).
    Bench: zero regressions across all five corpus repos.
-3. **Container-aware nested merge** — today a class whose methods diverge on
-   both sides is resolved by symbol-body LCS; a true nested symbol merge
-   (per-method three-way inside the class shell) lifts TS/Python/Java
-   resolution further.
-4. **Import semantics** — one-side import removal currently survives via
-   union; honor removal when the other side didn't touch it.
+3. ✅ **Container-aware nested merge (2026-06-12)** — when a class body
+   conflicts at line level, its direct children merge per symbol key
+   (with the full ladder per method: LCS fallback + rename pairing) and
+   the shell is reconstructed. Handles method reordering vs edit, the
+   case line merges can never resolve. Bench: +1 resolution on gin,
+   zero regressions, parity intact.
+4. ✅ **Import semantics (2026-06-12)** — true three-way set merge:
+   keep = (base ∩ ours ∩ theirs) ∪ (ours − base) ∪ (theirs − base).
+   One-sided removals win when the other side didn't touch the import.
 
 ## 5. Distribution
 

@@ -31,7 +31,21 @@ type SymbolMergeResult struct {
 // Confidence is computed as: 1.0 if no conflicts; otherwise the average of
 // per-symbol confidence where converged=1.0, single-sided change=0.95,
 // conflict=0.45.
+// NestedChildren maps a top-level container's MergeKey to its direct child
+// symbols on each side, enabling per-method merging inside a class shell.
+type NestedChildren struct {
+	Base, Ours, Theirs map[string][]core.SymbolData
+}
+
 func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResult {
+	return SymbolMergeWithChildren(base, ours, theirs, nil)
+}
+
+// SymbolMergeWithChildren is SymbolMerge plus container awareness: when a
+// class's body conflicts at line level (e.g. methods reordered on one side
+// and edited on the other), its direct children are three-way merged by
+// symbol key and the class shell is reconstructed around them.
+func SymbolMergeWithChildren(base, ours, theirs map[string]core.SymbolData, children *NestedChildren) SymbolMergeResult {
 	keys := mergedKeySet(base, ours, theirs)
 
 	merged := make([]core.SymbolData, 0, len(keys))
@@ -116,6 +130,17 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 					confN++
 					continue
 				}
+				// Container-aware nested merge: line merging is positional
+				// and gives up when methods move; merging the container's
+				// children by symbol key doesn't care where they sit.
+				if body, ok := nestedContainerMerge(k, basePtr, oursPtr, theirsPtr, children); ok {
+					resolved := *oursPtr
+					resolved.Body = body
+					merged = append(merged, resolved)
+					confSum += 0.65
+					confN++
+					continue
+				}
 			}
 			conflicts = append(conflicts, core.SymbolConflict{
 				Key:    k,
@@ -151,6 +176,98 @@ func SymbolMerge(base, ours, theirs map[string]core.SymbolData) SymbolMergeResul
 		conf = 0.45
 	}
 	return SymbolMergeResult{Merged: merged, Conflicts: conflicts, Confidence: conf}
+}
+
+// containerKinds are the symbol kinds whose bodies wrap mergeable children.
+var containerKinds = map[string]bool{
+	"class": true, "struct": true, "interface": true, "trait": true, "enum": true,
+}
+
+// nestedContainerMerge resolves a container whose body conflicts at line
+// level by three-way merging its direct children per symbol key, then
+// reconstructing the container around ours' shell. The child merge gets the
+// full ladder recursively (per-method LCS fallback, rename pairing). Any
+// child conflict abandons the attempt — the caller's conflict path runs.
+func nestedContainerMerge(key string, basePtr, oursPtr, theirsPtr *core.SymbolData, children *NestedChildren) (string, bool) {
+	if children == nil || !containerKinds[string(oursPtr.Kind)] {
+		return "", false
+	}
+	baseCh := children.Base[key]
+	oursCh := children.Ours[key]
+	theirsCh := children.Theirs[key]
+	if len(oursCh) == 0 || len(theirsCh) == 0 {
+		return "", false
+	}
+	childMerge := SymbolMerge(SymbolsToMap(baseCh), SymbolsToMap(oursCh), SymbolsToMap(theirsCh))
+	if len(childMerge.Conflicts) > 0 {
+		return "", false
+	}
+
+	// Reconstruct: splice merged child bodies into ours' container body.
+	// Child spans are absolute file lines; rebase them onto the container.
+	bodyLines := strings.Split(oursPtr.Body, "\n")
+	offset := oursPtr.Span.Start
+	mergedByKey := make(map[string]core.SymbolData, len(childMerge.Merged))
+	for _, c := range childMerge.Merged {
+		mergedByKey[MergeKey(c)] = c
+	}
+
+	type edit struct {
+		start, end int // 0-based line indices into bodyLines, inclusive
+		body       *string
+	}
+	var edits []edit
+	usedChild := map[string]bool{}
+	for i := range oursCh {
+		c := &oursCh[i]
+		start, end := c.Span.Start-offset, c.Span.End-offset
+		if start < 0 || end >= len(bodyLines) || start > end {
+			return "", false // span bookkeeping is off; don't guess
+		}
+		m, kept := mergedByKey[MergeKey(*c)]
+		switch {
+		case !kept:
+			edits = append(edits, edit{start: start, end: end}) // deleted
+		case m.Body != c.Body:
+			body := m.Body
+			edits = append(edits, edit{start: start, end: end, body: &body})
+		}
+		usedChild[MergeKey(*c)] = true
+	}
+	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
+	for i := 1; i < len(edits); i++ {
+		if edits[i].end >= edits[i-1].start {
+			return "", false // overlapping child spans; bail out
+		}
+	}
+	for _, e := range edits {
+		var repl []string
+		if e.body != nil {
+			repl = strings.Split(*e.body, "\n")
+		}
+		bodyLines = append(bodyLines[:e.start], append(repl, bodyLines[e.end+1:]...)...)
+	}
+
+	// Children added by theirs go before the container's closing line in
+	// brace languages, or at the end for indentation-based bodies.
+	var added []string
+	for _, c := range childMerge.Merged {
+		if !usedChild[MergeKey(c)] {
+			added = append(added, c.Body)
+		}
+	}
+	if len(added) > 0 {
+		insertAt := len(bodyLines)
+		if last := strings.TrimSpace(bodyLines[len(bodyLines)-1]); last == "}" || last == "};" || last == "end" {
+			insertAt = len(bodyLines) - 1
+		}
+		var block []string
+		for _, a := range added {
+			block = append(block, strings.Split(a, "\n")...)
+		}
+		bodyLines = append(bodyLines[:insertAt], append(block, bodyLines[insertAt:]...)...)
+	}
+	return strings.Join(bodyLines, "\n"), true
 }
 
 // resolvedRename carries one rename-with-edit resolution, keyed by the

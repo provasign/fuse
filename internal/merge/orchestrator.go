@@ -252,10 +252,15 @@ func (im *IntelliMerge) Merge(
 	topBase := mstrat.TopLevelSymbols(baseSyms)
 	topOurs := mstrat.TopLevelSymbols(oursSyms)
 	topTheirs := mstrat.TopLevelSymbols(theirsSyms)
-	smerge := mstrat.SymbolMerge(
+	smerge := mstrat.SymbolMergeWithChildren(
 		mstrat.SymbolsToMap(topBase),
 		mstrat.SymbolsToMap(topOurs),
 		mstrat.SymbolsToMap(topTheirs),
+		&mstrat.NestedChildren{
+			Base:   childIndex(baseSyms, topBase),
+			Ours:   childIndex(oursSyms, topOurs),
+			Theirs: childIndex(theirsSyms, topTheirs),
+		},
 	)
 	imerge := mstrat.ImportMerge(baseImps, oursImps, theirsImps)
 	res.Stats.AutoMerged = len(smerge.Merged) - len(smerge.Conflicts)
@@ -419,6 +424,26 @@ func (im *IntelliMerge) auditEntryFor(r *core.MergeResult) core.AuditEntry {
 //
 // This isn't AST-perfect but it preserves human-written formatting outside
 // symbol bodies, which is the right tradeoff for a merge driver.
+// childIndex maps each top-level container's MergeKey to its direct
+// children, for the container-aware nested merge. Grandchildren ride along
+// inside their parent's body text.
+func childIndex(all, top []core.SymbolData) map[string][]core.SymbolData {
+	keyByName := make(map[string]string, len(top))
+	for _, s := range top {
+		keyByName[s.Name] = mstrat.MergeKey(s)
+	}
+	out := map[string][]core.SymbolData{}
+	for _, s := range all {
+		if s.ParentName == "" {
+			continue
+		}
+		if k, ok := keyByName[s.ParentName]; ok {
+			out[k] = append(out[k], s)
+		}
+	}
+	return out
+}
+
 func reconstructFile(
 	oursContent string,
 	oursSyms []core.SymbolData,

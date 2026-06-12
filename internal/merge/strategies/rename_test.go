@@ -102,3 +102,27 @@ func TestSymbolMergeRenameWithConflictingEditFallsBack(t *testing.T) {
 		t.Fatalf("conflicting rename+edit must surface as conflict, got %+v", r.Merged)
 	}
 }
+
+// TestImportMergeOneSidedRemovalWins: an import removed on one side while
+// the other side didn't touch it must stay removed (the old union semantics
+// resurrected it).
+func TestImportMergeOneSidedRemovalWins(t *testing.T) {
+	imp := func(path string, line int) core.ImportStatement {
+		return core.ImportStatement{Path: path, Line: line}
+	}
+	base := []core.ImportStatement{imp("fmt", 1), imp("os", 2), imp("strings", 3)}
+	ours := []core.ImportStatement{imp("fmt", 1), imp("strings", 2)}                                   // removed os
+	theirs := []core.ImportStatement{imp("fmt", 1), imp("os", 2), imp("strings", 3), imp("errors", 4)} // added errors
+
+	r := ImportMerge(base, ours, theirs)
+	paths := map[string]bool{}
+	for _, i := range r.Merged {
+		paths[i.Path] = true
+	}
+	if paths["os"] {
+		t.Fatalf("one-sided removal of os was resurrected: %+v", r.Merged)
+	}
+	if !paths["fmt"] || !paths["strings"] || !paths["errors"] {
+		t.Fatalf("expected fmt+strings+errors, got %+v", r.Merged)
+	}
+}

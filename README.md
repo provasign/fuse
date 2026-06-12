@@ -66,7 +66,7 @@ code files where git conflicted):
 
 | Repo | Language | git conflicted | fuse resolved | byte-match human |
 |------|----------|---------------:|--------------:|-----------------:|
-| [gin](https://github.com/gin-gonic/gin) | Go | 15 | 4 (27%) | 3 (75%) |
+| [gin](https://github.com/gin-gonic/gin) | Go | 15 | 5 (33%) | 3 (60%) |
 | [express](https://github.com/expressjs/express) | JavaScript | 135 | 133 (99%) | 47 (35%) |
 | [socket.io](https://github.com/socketio/socket.io) | JavaScript | 9 | 7 (78%) | 1 (14%) |
 | [flask](https://github.com/pallets/flask) | Python | 28 | 23 (82%) | 9 (39%) |
