@@ -1,18 +1,11 @@
 package cli
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/provasign/fuse/internal/config"
 )
 
 // withDir changes cwd for the duration of the test.
@@ -234,50 +227,6 @@ func TestFindGitDir_WorktreeFile(t *testing.T) {
 	}
 }
 
-func TestServer_HealthAndMergeJSON(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Server.Port = 0
-	// Exercise the handler chain directly by replicating the server mux logic.
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-	if rec.Code != 200 {
-		t.Errorf("health %d", rec.Code)
-	}
-}
-
-func TestDecodeJSON_BadInput(t *testing.T) {
-	r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte("{garbage")))
-	var v map[string]string
-	if err := decodeJSON(r, &v); err == nil {
-		t.Error("expected decode err")
-	}
-}
-
-func TestDecodeJSON_UnknownField(t *testing.T) {
-	r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"unknown":1}`)))
-	var v struct {
-		Known string `json:"known"`
-	}
-	if err := decodeJSON(r, &v); err == nil {
-		t.Error("expected unknown-field err")
-	}
-}
-
-func TestWriteJSON(t *testing.T) {
-	rec := httptest.NewRecorder()
-	writeJSON(rec, 418, map[string]string{"x": "y"})
-	if rec.Code != 418 {
-		t.Error("status not set")
-	}
-	if rec.Header().Get("Content-Type") != "application/json" {
-		t.Error("ct wrong")
-	}
-}
-
 func TestNewCmd(t *testing.T) {
 	c := newCmd("git", "--version")
 	if c == nil {
@@ -337,23 +286,6 @@ func TestRealMergeDriver(t *testing.T) {
 	}
 }
 
-func TestStartServer_BadPort(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Server.Port = -1 // invalid
-	// Run in a goroutine with a quick timeout via context — but startServer
-	// blocks. We just check that ListenAndServe fails fast.
-	done := make(chan int, 1)
-	go func() { done <- startServer(cfg) }()
-	// Give it a moment; if it bound somehow, abort.
-	select {
-	case code := <-done:
-		if code != 1 {
-			t.Errorf("expected exit code 1, got %d", code)
-		}
-	case <-context.Background().Done():
-	}
-}
-
 // Smoke test that the JSON encoder for AuditEntry works.
 func TestStatus_BadAuditJSON(t *testing.T) {
 	dir := gitInit(t)
@@ -365,18 +297,5 @@ func TestStatus_BadAuditJSON(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(auditDir, "audit.json"), []byte("not json"), 0o644)
 	if code := Run([]string{"status"}); code != 2 {
 		t.Errorf("expected 2, got %d", code)
-	}
-}
-
-// Sanity: round-trip JSON to verify writeJSON output.
-func TestWriteJSON_Encoding(t *testing.T) {
-	rec := httptest.NewRecorder()
-	writeJSON(rec, 200, map[string]int{"n": 5})
-	var got map[string]int
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if got["n"] != 5 {
-		t.Errorf("got %v", got)
 	}
 }

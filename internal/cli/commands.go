@@ -18,6 +18,7 @@ import (
 	"github.com/provasign/fuse/internal/core"
 	"github.com/provasign/fuse/internal/grove"
 	"github.com/provasign/fuse/internal/handoff"
+	"github.com/provasign/fuse/internal/mcp"
 	"github.com/provasign/fuse/internal/merge"
 	"github.com/provasign/fuse/internal/merge/analysis"
 	"github.com/provasign/fuse/internal/parser"
@@ -59,8 +60,8 @@ func Run(argv []string) int {
 		return cmdResolve(argv[1:])
 	case "bench":
 		return cmdBench(argv[1:])
-	case "serve":
-		return cmdServe(argv[1:])
+	case "mcp":
+		return cmdMCP(argv[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "fuse: unknown command %q\n", argv[0])
 		printUsage(os.Stderr)
@@ -84,7 +85,7 @@ Commands:
   fuse deps <file>                           Show dependencies via Grove
   fuse config                                Print resolved configuration
   fuse bench [repo] [--limit N] [--json]     Replay historical merges and score auto-resolution
-  fuse serve [--port 9999]                   Start HTTP API
+  fuse mcp [dir]                             Start the stdio MCP server (agent integration)
   fuse version                               Show version
 `)
 }
@@ -806,21 +807,27 @@ func cmdDeps(args []string) int {
 	return 0
 }
 
-func cmdServe(args []string) int {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	port := fs.Int("port", 9999, "port")
-	_ = fs.Parse(args)
-	cfg := loadConfig()
-	if *port != 9999 {
-		cfg.Server.Port = *port
+// cmdMCP starts the stdio MCP server — fuse's agent-facing surface
+// (fuse_merge_check, fuse_preview, fuse_resolve, fuse_impact).
+func cmdMCP(args []string) int {
+	root := "."
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		root = args[0]
 	}
-	chosen, err := pickPort(cfg.Server.Port)
+	abs, err := filepath.Abs(root)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "port:", err)
+		fmt.Fprintln(os.Stderr, "fuse mcp:", err)
+		return 2
+	}
+	cfg := loadConfig()
+	groveClient, _ := newGrove(cfg, false)
+	defer closeGroveClient(groveClient)
+	h := mcp.NewHandler(abs, groveClient)
+	if err := mcp.NewServer(h).Serve(os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "fuse mcp:", err)
 		return 1
 	}
-	cfg.Server.Port = chosen
-	return startServer(cfg)
+	return 0
 }
 
 // upsertGitAttributes ensures each line in lines is present in path.

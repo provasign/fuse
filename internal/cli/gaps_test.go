@@ -2,13 +2,9 @@ package cli
 
 import (
 	"bytes"
-	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 // ── notifyLineResult: all branches ────────────────────────────────────────────
@@ -72,42 +68,6 @@ func writeFile(t *testing.T, dir, name string, content string) string {
 		t.Fatal(err)
 	}
 	return p
-}
-
-// ── cmdServe / startServer ────────────────────────────────────────────────────
-
-func TestCmdServe_StartsAndResponds(t *testing.T) {
-	// Find a free port.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Skip("no free port")
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
-
-	t.Setenv("FUSE_GROVE_REQUIRED", "false")
-	done := make(chan int, 1)
-	go func() {
-		done <- Run([]string{"serve", fmt.Sprintf("--port=%d", port)})
-	}()
-
-	// Wait up to 2 s for the server to bind.
-	var resp *http.Response
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
-		if err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if err != nil {
-		t.Skipf("server didn't start: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Errorf("health returned %d", resp.StatusCode)
-	}
 }
 
 // ── cmdStatus edge cases ──────────────────────────────────────────────────────

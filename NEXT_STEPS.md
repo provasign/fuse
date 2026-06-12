@@ -115,6 +115,9 @@ piece of evidence nobody renders today: **integration evidence**.
 `fuse serve` (HTTP) already exists. The question is what agents should talk
 to. Recommendation:
 
+- ✅ **SHIPPED (2026-06-12): `fuse mcp`** with `fuse_merge_check`,
+  `fuse_preview`, `fuse_resolve`, `fuse_impact` — token-disciplined
+  (terse schemas, summary-first compact results). Original plan follows:
 - **Ship `fuse mcp` (stdio MCP server)** following the house pattern
   (`prism mcp`, grove embedded). Agents don't want ports, tokens, or
   daemons; stdio MCP is zero-config and per-workspace. Tools:
@@ -130,9 +133,10 @@ to. Recommendation:
   - `fuse_impact {file|symbol}` / `fuse_check {file}` — Grove blast radius
     and breaking-changes-vs-HEAD, so agents can self-check before
     finishing a task.
-- **Keep HTTP for machines that aren't agents** — CI jobs, editor plugins,
-  the GitHub Action. It's already there; don't grow it beyond `/merge` +
-  `/health` until something needs it.
+- ~~Keep HTTP for machines that aren't agents~~ **DONE differently
+  (2026-06-12): `fuse serve` is removed.** CI is covered by the GitHub
+  Action, agents by `fuse mcp`, git by the merge driver, humans by the
+  CLI — nothing needed HTTP.
 - **Later (stale-context loop, §1):** the MCP server is also the natural
   delivery channel for drift notifications once Grove graph-diff exists.
   Don't build the notification plumbing until the simple tools above are

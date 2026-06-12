@@ -15,7 +15,6 @@ type Config struct {
 	GroveBinary string        `yaml:"grove_binary"`
 	Merge       MergeConfig   `yaml:"merge"`
 	Git         GitConfig     `yaml:"git"`
-	Server      ServerConfig  `yaml:"server"`
 	Resolve     ResolveConfig `yaml:"resolve"`
 }
 
@@ -43,10 +42,6 @@ type GitConfig struct {
 	AttributesScope string `yaml:"attributes_scope"`
 }
 
-type ServerConfig struct {
-	Port int `yaml:"port"`
-}
-
 // Default returns the baseline configuration used when no file is found.
 func Default() *Config {
 	return &Config{
@@ -68,7 +63,6 @@ func Default() *Config {
 			AutoInstall:     false,
 			AttributesScope: "repo",
 		},
-		Server: ServerConfig{Port: 9999},
 	}
 }
 

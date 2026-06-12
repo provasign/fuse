@@ -14,9 +14,6 @@ func TestDefaultAndLoadNoFile(t *testing.T) {
 	if cfg.GroveURL != "embedded://grove" {
 		t.Errorf("unexpected GroveURL %q (embedded mode has no daemon URL)", cfg.GroveURL)
 	}
-	if cfg.Server.Port != 9999 {
-		t.Errorf("unexpected port %d", cfg.Server.Port)
-	}
 	if cfg.Merge.HandoffThreshold == 0 {
 		t.Error("expected non-zero handoff threshold")
 	}
@@ -45,9 +42,6 @@ server:
 	}
 	if cfg.Merge.HandoffThreshold != 0.5 {
 		t.Errorf("got %v", cfg.Merge.HandoffThreshold)
-	}
-	if cfg.Server.Port != 1234 {
-		t.Errorf("got %d", cfg.Server.Port)
 	}
 }
 

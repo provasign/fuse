@@ -242,7 +242,7 @@ fuse impact <file-or-symbol>    # blast radius via Grove
 fuse deps <file>                # dependency edges via Grove
 fuse status                     # show recent merge decisions from the audit log
 fuse config                     # print resolved configuration
-fuse serve [--port 9999]        # start HTTP API
+fuse mcp [dir]                  # stdio MCP server (agent integration)
 ```
 
 ---
@@ -262,9 +262,6 @@ merge:
 
 resolve:
   agent_cmd: "claude -p"         # default agent for `fuse resolve`
-
-server:
-  port: 9999
 ```
 
 ---
@@ -342,12 +339,28 @@ make build
 # Score fuse against your own merge history
 ./bin/fuse bench . --limit 200
 
-# Start HTTP API
-./bin/fuse serve --port 9999
-curl -X POST http://localhost:9999/merge \
-  -H 'Content-Type: application/json' \
-  -d '{"base":"...","ours":"...","theirs":"...","path":"x.go"}'
+# Agent integration: stdio MCP server with four tools
+./bin/fuse mcp .
 ```
+
+## MCP Tools
+
+`fuse mcp` exposes fuse to agents the same way `grove mcp` and `prism mcp`
+do: stdio JSON-RPC, no ports, no tokens. Four tools, deliberately few and
+terse — results are summary-first (verdict + counts; detail only where
+conflicts exist) and compact JSON, because they land in an agent's context
+window:
+
+| Tool | Purpose |
+|------|---------|
+| `fuse_merge_check` | Dry-run semantic merge of HEAD vs a ref — "will my work merge cleanly?" before pushing. The killer tool: merge conflicts become pre-push feedback instead of failures. |
+| `fuse_preview` | Three-way merge of in-memory content; returns merged text + conflict flag. |
+| `fuse_resolve` | Fetch a handoff prompt for in-context resolution; validate and optionally apply the resolution. |
+| `fuse_impact` | Grove blast radius for a file/symbol — self-check before finishing a task. |
+
+There is no HTTP server. PR conflict resolution in CI is the GitHub
+Action's job; agents use MCP; git invokes the merge driver; humans use the
+CLI.
 
 ---
 
