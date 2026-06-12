@@ -61,19 +61,34 @@ Fuse ships with its own benchmark: `fuse bench <repo>` replays every merge
 commit in a repository's history, re-merges each file both branches modified,
 and scores the result against the resolution the humans actually committed.
 
-Replaying [gin](https://github.com/gin-gonic/gin)'s full merge history
-(148 merge commits, 89 dual-modified files):
+Replayed across five real repositories (2026-06-12, `--limit 400`,
+code files where git conflicted):
 
-|                  | files | fuse resolved | matches human resolution |
-|------------------|------:|--------------:|-------------------------:|
-| git conflicted   |    16 |       4 (25%) |                  3 (75%) |
-| git auto-merged  |    73 |     73 (100%) |                73 (100%) |
+| Repo | Language | git conflicted | fuse resolved | byte-match human |
+|------|----------|---------------:|--------------:|-----------------:|
+| [gin](https://github.com/gin-gonic/gin) | Go | 15 | 4 (27%) | 3 (75%) |
+| [express](https://github.com/expressjs/express) | JavaScript | 135 | 133 (99%) | 47 (35%) |
+| [socket.io](https://github.com/socketio/socket.io) | JavaScript | 9 | 7 (78%) | 1 (14%) |
+| [flask](https://github.com/pallets/flask) | Python | 28 | 23 (82%) | 9 (39%) |
+| [requests](https://github.com/psf/requests) | Python | 2 | 1 (50%) | 1 (100%) |
+
+And on every file git auto-merges, fuse is clean as well — **100% parity on
+all five repos** (gin 71/71, express 301/301, flask 107/107, requests 41/41,
+socket.io 117/117), with fuse's auto-merge bytes matching the human result
+exactly as often as git's do.
 
 Two properties matter more than the headline rate:
 
 - **Parity:** on every file git can merge, fuse produces the identical bytes.
+  (Files whose inputs don't even parse — e.g. DSLs hiding behind a `.js`
+  extension — are now merged strictly line-level, like git, instead of
+  being reconstructed from unreliable symbol extractions.)
 - **No silent corruption:** every auto-merge is re-parsed; anything suspect
   becomes an explicit conflict.
+
+"Byte-match human" is a hard bar: humans often make unrelated edits while
+resolving, so a non-match is not necessarily a wrong merge. `fuse bench`
+prints per-language tables (`per language:`) on any repo.
 
 Run it on your own history: `fuse bench . --limit 200`. Numbers vary by
 codebase and conflict style; measure, don't trust.

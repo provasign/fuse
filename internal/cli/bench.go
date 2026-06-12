@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -52,6 +53,7 @@ func cmdBench(args []string) int {
 
 	var (
 		sum     benchSummary
+		perLang = map[string]*benchSummary{}
 		results []benchFileResult
 	)
 	im := newBenchMerger()
@@ -98,6 +100,12 @@ func cmdBench(args []string) int {
 				continue
 			}
 			sum.add(r)
+			ls, ok := perLang[r.Language]
+			if !ok {
+				ls = &benchSummary{}
+				perLang[r.Language] = ls
+			}
+			ls.add(r)
 			if *verbose {
 				fmt.Printf("%s %s git=%s fuse=%s match=%v\n",
 					m[:8], f, cleanWord(r.GitClean), cleanWord(r.FuseClean), r.FuseMatch)
@@ -110,13 +118,15 @@ func cmdBench(args []string) int {
 
 	if *jsonOut {
 		out, _ := json.MarshalIndent(struct {
-			Summary benchSummary      `json:"summary"`
-			Files   []benchFileResult `json:"files"`
-		}{sum, results}, "", "  ")
+			Summary     benchSummary             `json:"summary"`
+			PerLanguage map[string]*benchSummary `json:"perLanguage"`
+			Files       []benchFileResult        `json:"files"`
+		}{sum, perLang, results}, "", "  ")
 		fmt.Println(string(out))
 		return 0
 	}
 	printBenchSummary(&sum)
+	printPerLanguage(perLang)
 	return 0
 }
 
@@ -326,6 +336,28 @@ func pct(n, of int) string {
 		return "  n/a"
 	}
 	return fmt.Sprintf("%3.0f%%", 100*float64(n)/float64(of))
+}
+
+// printPerLanguage prints one compact row per language so corpus runs on
+// polyglot repos report where the headroom actually is.
+func printPerLanguage(perLang map[string]*benchSummary) {
+	if len(perLang) < 2 {
+		return
+	}
+	langs := make([]string, 0, len(perLang))
+	for l := range perLang {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+	fmt.Printf("\nper language:\n")
+	fmt.Printf("%-12s %7s %14s %18s %20s\n", "", "files", "git conflicted", "fuse resolved", "byte-match human")
+	for _, l := range langs {
+		s := perLang[l]
+		fmt.Printf("%-12s %7d %14d %12d (%s) %14d (%s)\n",
+			l, s.FilesReplayed, s.GitConflicted,
+			s.FuseResolvedOfThose, pct(s.FuseResolvedOfThose, s.GitConflicted),
+			s.FuseMatchOfThose, pct(s.FuseMatchOfThose, s.FuseResolvedOfThose))
+	}
 }
 
 func printBenchSummary(s *benchSummary) {

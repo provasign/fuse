@@ -166,6 +166,30 @@ func (im *IntelliMerge) Merge(
 		return res, nil
 	}
 
+	// If any input has syntax errors, the symbol pipeline is untrustworthy:
+	// extraction would run over ERROR subtrees, and the re-parse gate below
+	// carries no signal (content that never parsed cleanly can't be expected
+	// to parse after merging). This bites real corpora — express's JSpec-DSL
+	// files carry a .js extension but aren't JavaScript, and abandoning git's
+	// clean merge for a symbol reconstruction there broke byte parity.
+	// Behave exactly like git instead.
+	if treeHasError(baseTree) || treeHasError(oursTree) || treeHasError(theirsTree) {
+		out := mstrat.GitLineMerge(string(baseContent), string(oursContent), string(theirsContent))
+		res.MergedContent = out.Merged
+		res.HasConflict = out.HasConflict
+		res.Confidence = out.Confidence * 0.9
+		res.Strategy = core.StrategyLine
+		res.ConflictType = core.ConflictIncremental
+		res.Severity = core.SeverityLow
+		if out.HasConflict {
+			res.Severity = core.SeverityMedium
+		}
+		res.Diagnostics = append(res.Diagnostics, "input has syntax errors; line-level merge only (git parity)")
+		res.Stats.TimingMs = time.Since(started).Milliseconds()
+		res.AuditEntry = im.auditEntryFor(res)
+		return res, nil
+	}
+
 	baseSyms, _ := strategy.Extract(baseTree, baseContent)
 	oursSyms, _ := strategy.Extract(oursTree, oursContent)
 	theirsSyms, _ := strategy.Extract(theirsTree, theirsContent)
