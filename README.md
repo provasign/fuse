@@ -218,7 +218,13 @@ Fuse exists for the layer above:
 
 ## Installation
 
-**Binary install (fastest):**
+**Homebrew (macOS / Linux):**
+
+```bash
+brew install provasign/shale/fuse   # one tap for the family
+```
+
+**Binary install:**
 
 ```bash
 # macOS / Linux
