@@ -1,6 +1,6 @@
 # Fuse Roadmap
 
-Fuse is a semantic Git merge driver. MIT licensed. Embeds Grove for
+Fuse is a semantic Git merge driver. Apache 2.0 licensed. Embeds Grove for
 cross-file context. See [NEXT_STEPS.md](NEXT_STEPS.md) for the working
 plan beyond the checklists below.
 

@@ -278,4 +278,4 @@ git config --global merge.fuse.driver 2>/dev/null || echo "merge driver removed"
 
 ---
 
-*Fuse is MIT licensed. No telemetry. Your code never leaves your machine.*
+*Fuse is Apache 2.0 licensed. No telemetry. Your code never leaves your machine.*
