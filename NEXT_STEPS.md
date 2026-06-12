@@ -27,11 +27,22 @@ library) — never the provasign gating workflow.
 >   old→new signatures) to `.git/fuse/drift.json` — advisory, fail-open,
 >   gated by `merge.enable_drift`. `fuse status` summarizes it.
 >
-> **Not yet built (deliberately, per §3):** the delivery half of the loop —
-> intersecting drift with another agent's working set (Prism) and pushing
-> the notification — plus `fuse mcp` (§3), merge-quality items (§4), and
-> distribution (§5). `drift.json` is the stable interface the delivery
-> plumbing will consume.
+> **✅ Delivery half shipped too (2026-06-12, Grove v0.6.1 / prism 3515a7e):**
+> the **stale-context loop from §1 is now closed end to end.** Prism's
+> `prism_drift` tool re-verifies the agent's delivered working set against
+> the working tree and reports symbol-level drift — origin `merge` with
+> Fuse's old→new signatures when `drift.json` shows a merge caused it —
+> and every context-bearing Prism response carries a one-line stale-context
+> warning the moment a delivered file changes on disk. Grove also gained
+> rename detection (GraphDiff `renamed` + drift `renamedFrom`).
+>
+> **Still open:** `fuse mcp` and the serve-vs-Action decision (§3 — two
+> explicit pending decisions: retire `fuse serve` in favor of the GitHub
+> Action, and weigh MCP vs CLI for fuse's agent surface), merge-quality
+> items (§4: bench corpus, rename-aware *merge* resolution,
+> container-aware nested merge, import semantics), distribution (§5:
+> Homebrew, Action hardening, Windows resolve), and Shale evidence
+> emission (§2).
 
 ---
 

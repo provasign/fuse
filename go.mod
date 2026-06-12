@@ -10,7 +10,7 @@ require (
 
 require (
 	github.com/provasign/astkit v0.4.0
-	github.com/provasign/grove v0.6.0
+	github.com/provasign/grove v0.6.1
 )
 
 require (
