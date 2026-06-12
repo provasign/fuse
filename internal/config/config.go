@@ -45,7 +45,7 @@ type GitConfig struct {
 // Default returns the baseline configuration used when no file is found.
 func Default() *Config {
 	return &Config{
-		Version:     1,
+		Version: 1,
 		// Grove is embedded in-process; the URL is a legacy field kept for
 		// compatibility and shown in config output. No daemon, no port.
 		GroveURL:    "embedded://grove",

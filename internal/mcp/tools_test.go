@@ -204,7 +204,7 @@ func TestResolvePromptAndApply(t *testing.T) {
 func TestImpactCapsAndCounts(t *testing.T) {
 	fake := &fakeGrove{}
 	for i := 0; i < maxImpactNodes+10; i++ {
-		fake.nodes = append(fake.nodes, grove.ImpactNode{ID: string(rune('a' + i%26)) + string(rune('0' + i%10)) + string(rune(i)), FilePath: "f.go", Name: "N"})
+		fake.nodes = append(fake.nodes, grove.ImpactNode{ID: string(rune('a'+i%26)) + string(rune('0'+i%10)) + string(rune(i)), FilePath: "f.go", Name: "N"})
 	}
 	h := NewHandler(t.TempDir(), fake)
 	out, err := h.Invoke("fuse_impact", map[string]any{"query": "Login"})
