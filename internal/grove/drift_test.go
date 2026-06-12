@@ -5,6 +5,55 @@ import (
 	"testing"
 )
 
+// TestDriftReportsRename: a symbol renamed with an identical body must show
+// as one "renamed" entry carrying the old name — not an unrelated
+// removal + addition.
+func TestDriftReportsRename(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "orders.go", `package main
+
+func ProcessOrder(id string) error {
+	validate(id)
+	return queue.Push(id)
+}
+`)
+	c := New("").WithTokenFromDir(dir)
+	defer c.Close()
+	ctx := context.Background()
+	if err := c.Index(ctx, dir); err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	snap, err := c.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	drift, err := c.DriftForMergedFile(ctx, snap, "orders.go", []byte(`package main
+
+func HandleOrder(id string) error {
+	validate(id)
+	return queue.Push(id)
+}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drift.Renamed) != 1 {
+		t.Fatalf("renamed = %+v (full drift %+v)", drift.Renamed, drift)
+	}
+	r := drift.Renamed[0]
+	if r.QualifiedName != "HandleOrder" || r.RenamedFrom != "ProcessOrder" || r.Change != "renamed" {
+		t.Fatalf("rename entry = %+v", r)
+	}
+	if len(drift.Added) != 0 || len(drift.Removed) != 0 {
+		t.Fatalf("rename leaked into add/remove: %+v", drift)
+	}
+	// Exported rename breaks callers of the old name.
+	if len(drift.Breaking) != 1 || drift.Breaking[0].RenamedFrom != "ProcessOrder" {
+		t.Fatalf("breaking = %+v", drift.Breaking)
+	}
+}
+
 // TestDriftForMergedFile covers the merge-driver flow: the merged content
 // exists only in memory (git writes the driver output to the worktree after
 // the driver exits), so drift must be computable without touching disk —

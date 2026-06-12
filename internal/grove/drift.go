@@ -16,10 +16,13 @@ type DriftSymbol struct {
 	FilePath      string `json:"filePath"`
 	QualifiedName string `json:"qualifiedName"`
 	Kind          string `json:"kind"`
-	Change        string `json:"change"` // added | removed | signature | body
+	Change        string `json:"change"` // added | removed | signature | body | renamed
 	Exported      bool   `json:"exported"`
 	OldSignature  string `json:"oldSignature,omitempty"`
 	NewSignature  string `json:"newSignature,omitempty"`
+	// RenamedFrom carries the previous qualified name (and file, when it
+	// moved) for change == "renamed".
+	RenamedFrom string `json:"renamedFrom,omitempty"`
 }
 
 // Drift is the structural delta of the code graph across a merge, matched by
@@ -31,18 +34,23 @@ type Drift struct {
 	Added    []DriftSymbol `json:"added,omitempty"`
 	Removed  []DriftSymbol `json:"removed,omitempty"`
 	Changed  []DriftSymbol `json:"changed,omitempty"`
+	Renamed  []DriftSymbol `json:"renamed,omitempty"`
 	Breaking []DriftSymbol `json:"breaking,omitempty"`
 }
 
 // Empty reports whether the merge produced no structural change.
 func (d Drift) Empty() bool {
-	return len(d.Added) == 0 && len(d.Removed) == 0 && len(d.Changed) == 0
+	return len(d.Added) == 0 && len(d.Removed) == 0 && len(d.Changed) == 0 && len(d.Renamed) == 0
 }
 
 // Summary is a one-line human rendering for merge-driver stderr output.
 func (d Drift) Summary() string {
-	return fmt.Sprintf("+%d added, -%d removed, ~%d changed symbol(s), %d breaking",
+	out := fmt.Sprintf("+%d added, -%d removed, ~%d changed symbol(s), %d breaking",
 		len(d.Added), len(d.Removed), len(d.Changed), len(d.Breaking))
+	if len(d.Renamed) > 0 {
+		out += fmt.Sprintf(", %d renamed", len(d.Renamed))
+	}
+	return out
 }
 
 // Snapshot captures the current graph for later drift computation. Call it
@@ -98,10 +106,37 @@ func driftFromDiff(diff groveeng.GraphDiff) Drift {
 	for _, change := range diff.Changed {
 		d.Changed = append(d.Changed, driftChange(change))
 	}
+	for _, change := range diff.Renamed {
+		d.Renamed = append(d.Renamed, driftRename(change))
+	}
 	for _, change := range diff.BreakingChanges {
+		if change.Before != nil && change.After != nil &&
+			change.Before.QualifiedName != change.After.QualifiedName {
+			d.Breaking = append(d.Breaking, driftRename(change))
+			continue
+		}
 		d.Breaking = append(d.Breaking, driftChange(change))
 	}
 	return d
+}
+
+// driftRename renders a rename pair: the entry carries the new identity,
+// with the old qualified name (and file, on a move) in RenamedFrom.
+func driftRename(change groveeng.SymbolChange) DriftSymbol {
+	from := change.Before.QualifiedName
+	if change.Before.FilePath != change.After.FilePath {
+		from = change.Before.FilePath + "::" + from
+	}
+	return DriftSymbol{
+		FilePath:      change.After.FilePath,
+		QualifiedName: change.After.QualifiedName,
+		Kind:          string(change.After.Kind),
+		Change:        "renamed",
+		Exported:      change.After.Exports,
+		OldSignature:  change.Before.Signature,
+		NewSignature:  change.After.Signature,
+		RenamedFrom:   from,
+	}
 }
 
 func driftSymbol(s *groveeng.Symbol, change string) DriftSymbol {
