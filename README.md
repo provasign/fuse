@@ -437,6 +437,57 @@ CLI.
 
 ---
 
+## Troubleshooting
+
+**`git merge` still produces ordinary conflicts.** The driver only fires
+for paths listed in `.gitattributes`. Check both halves of the registration:
+
+```bash
+git config merge.fuse.driver              # → fuse merge %O %A %B %P
+git check-attr merge -- path/to/file.go   # → merge: fuse
+```
+
+If `check-attr` says `unspecified`, `.gitattributes` is missing the pattern
+or isn't committed on the branch being merged. Note that `git config` is
+per-clone: every clone runs `fuse init` (or `fuse install`) once, while
+`.gitattributes` travels with the repo.
+
+**`fuse: command not found` during a merge, but `fuse version` works in
+your shell.** Git runs merge drivers through a non-interactive shell with a
+possibly shorter `PATH`. Install fuse somewhere global, or register an
+absolute path:
+`git config merge.fuse.driver "/opt/homebrew/bin/fuse merge %O %A %B %P"`.
+
+**An old version keeps running.** `which fuse` — a stale copy earlier in
+`PATH` (commonly `~/bin`) shadows a newer install. Remove it or symlink it
+to the new binary.
+
+**`fuse init` says "not a git repository".** The driver registers into a
+repo's `.git/config`. Run it inside the repo or pass the path
+(`fuse init path/to/repo`); use `--skip-driver` for agent integration only.
+
+**The fuse_* MCP tools don't appear in the agent.** MCP servers load at
+session start — restart the agent session after `fuse init`. In Claude
+Code, confirm `.mcp.json` has the `fuse` entry and approve the server when
+prompted.
+
+**Merges are slow on a huge repo.** The first merge builds the Grove index;
+delta indexing makes subsequent merges cheap. Native analyzers default to a
+5 s timeout — set `GROVE_NATIVE_TIMEOUT=60s` on very large repos. Timeouts
+degrade gracefully and never block the merge.
+
+**A merge still produced conflict markers.** Both sides changed the same
+symbol in incompatible ways — that is the designed escalation, not a
+failure. The handoff prompt is in `.git/fuse/`; resolve it with
+`fuse resolve <file> --agent "claude -p" --apply` or via the `fuse_resolve`
+MCP tool.
+
+**Undo everything.** `fuse uninstall` removes the git config; delete the
+`merge=fuse` lines from `.gitattributes`. Merges revert to git's standard
+behavior immediately — fuse never changes how history is stored.
+
+---
+
 ## Status
 
 The merge pipeline is benchmarked against real merge history (`fuse bench`)
