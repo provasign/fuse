@@ -171,13 +171,13 @@ expected-value order:
 
 ## 5. Distribution
 
-- **Homebrew**: join the existing tap — `brew install provasign/shale/fuse`
-  (one tap for the family; shale already trained users to trust it).
-- **GitHub Action hardening**: the action shipped in v0.5.0; add a follow-up
-  step example that runs `fuse resolve --agent` on the handoff prompts so
-  the README shows the fully-automated path end to end.
-- **Windows**: `fuse resolve --agent` shells through `$SHELL`/`/bin/sh`;
-  needs a cmd/PowerShell equivalent.
+- ✅ **Homebrew (2026-06-12)**: `Formula/fuse.rb` lives in the family tap —
+  `brew install provasign/shale/fuse` verified end to end.
+- ✅ **GitHub Action hardening (2026-06-12)**: README shows the fully
+  automated path — follow-up step runs `fuse resolve --agent` per prompt,
+  applies validated resolutions, pushes.
+- ✅ **Windows (2026-06-12)**: resolve --agent uses %COMSPEC% /C (or
+  -Command for PowerShell/pwsh); FUSE_SHELL overrides everywhere.
 
 ## 6. Explicitly not doing
 
