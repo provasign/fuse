@@ -71,10 +71,10 @@ func installMergeDriver(dir string) error {
 	if err != nil {
 		return fmt.Errorf("not a git repository: %s", dir)
 	}
-	if err := runGit("-C", dir, "config", "merge.fuse.name", "Fuse semantic merge driver"); err != nil {
+	if err := runGitIn(dir, "config", "merge.fuse.name", "Fuse semantic merge driver"); err != nil {
 		return err
 	}
-	if err := runGit("-C", dir, "config", "merge.fuse.driver", "fuse merge %O %A %B %P"); err != nil {
+	if err := runGitIn(dir, "config", "merge.fuse.driver", "fuse merge %O %A %B %P"); err != nil {
 		return err
 	}
 	return upsertGitAttributes(filepath.Join(top, ".gitattributes"), mergeDriverAttributes)
@@ -105,6 +105,17 @@ func gitOutput(dir string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// runGitIn runs git -C dir with captured output. Unlike runGit it does not
+// inherit the process's stdout/stderr handles, which can be invalid inside
+// Windows test processes.
+func runGitIn(dir string, args ...string) error {
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // fuseSteering is injected into every agent instruction file. Terse on
