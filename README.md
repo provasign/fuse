@@ -246,7 +246,31 @@ make build    # compile ./bin/fuse
 make install  # install to $GOPATH/bin
 ```
 
-Register as a Git merge driver in the current repository:
+**One-command setup (recommended):**
+
+```bash
+fuse init
+```
+
+`fuse init` does everything a repo needs:
+
+1. Registers fuse as the git merge driver (git config + `.gitattributes`),
+   so plain `git merge` / `git rebase` resolves structural conflicts
+   symbol-by-symbol and records drift evidence in `.git/fuse/drift.json`.
+2. Registers the `fuse` MCP server with every detected AI coding tool —
+   Claude Code (`.mcp.json`), Cursor, Windsurf, VS Code, Zed, Codex CLI.
+3. Writes steering instructions so agents use the `fuse_*` tools correctly —
+   `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `AGENTS.md`, `GEMINI.md`,
+   `.github/copilot-instructions.md`, `.clinerules`, Devin, Kiro.
+
+Re-running `fuse init` is idempotent: it refreshes a stale steering section
+in place, never duplicates `.gitattributes` lines, and leaves an
+already-correct `.mcp.json` untouched (rewriting it would reset Claude
+Code's approval state). Flags: `--global` writes MCP config to user-level
+files (`~/.claude.json`, `~/.cursor/mcp.json`, …) instead of the project;
+`--skip-driver` skips the merge-driver registration.
+
+**Merge driver only:**
 
 ```bash
 fuse install
@@ -276,7 +300,8 @@ git config --global merge.fuse.driver "fuse merge %O %A %B %P"
 ## CLI Reference
 
 ```bash
-fuse install                    # register git driver + .gitattributes in this repo
+fuse init [dir] [--global] [--skip-driver]  # full setup: merge driver + MCP + agent steering
+fuse install                    # register git driver + .gitattributes in this repo (driver only)
 fuse uninstall                  # remove git driver registration
 fuse merge <base> <ours> <theirs> [path]    # manual invocation (normally called by git)
 fuse preview <base> <ours> <theirs>         # print merged result without writing
@@ -371,7 +396,10 @@ Every merge decision is appended to `.git/fuse/audit.json`:
 # Build
 make build
 
-# Register fuse as the merge driver in this repo
+# Full setup: merge driver + MCP registration + agent steering instructions
+./bin/fuse init
+
+# Or merge driver only
 ./bin/fuse install
 
 # Show resolved config

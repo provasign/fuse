@@ -42,6 +42,8 @@ func Run(argv []string) int {
 		return cmdMerge(argv[1:])
 	case "preview":
 		return cmdPreview(argv[1:])
+	case "init":
+		return cmdInit(argv[1:])
 	case "install":
 		return cmdInstall(argv[1:])
 	case "uninstall":
@@ -75,7 +77,10 @@ func printUsage(w io.Writer) {
 Commands:
   fuse merge <base> <ours> <theirs> [path]   Perform a semantic merge; writes result to <ours>
   fuse preview <base> <ours> <theirs>        Print merged result without writing
-  fuse install                               Register fuse as a Git merge driver
+  fuse init [dir] [--global] [--skip-driver] Full setup: merge driver + MCP registration with
+                                             detected AI tools + agent steering instructions
+                                             (--global: user-level MCP config instead of project)
+  fuse install                               Register fuse as a Git merge driver (driver only)
   fuse uninstall                             Unregister fuse
   fuse status                                Show last audit stats
   fuse resolve <conflict-file> [--agent <cmd>] [--apply]
@@ -436,23 +441,7 @@ func cmdInstall(_ []string) int {
 		return 2
 	}
 	// Append to .gitattributes for supported file types.
-	attrs := []string{
-		"*.go merge=fuse",
-		"*.ts merge=fuse",
-		"*.tsx merge=fuse",
-		"*.js merge=fuse",
-		"*.jsx merge=fuse",
-		"*.mjs merge=fuse",
-		"*.cjs merge=fuse",
-		"*.py merge=fuse",
-		"*.java merge=fuse",
-		"*.rs merge=fuse",
-		"*.json merge=fuse",
-		"*.yaml merge=fuse",
-		"*.yml merge=fuse",
-		"*.toml merge=fuse",
-	}
-	if err := upsertGitAttributes(".gitattributes", attrs); err != nil {
+	if err := upsertGitAttributes(".gitattributes", mergeDriverAttributes); err != nil {
 		fmt.Fprintln(os.Stderr, "fuse install:", err)
 		return 2
 	}
