@@ -162,8 +162,32 @@ jobs:
 ```
 
 When fuse can't resolve everything, the job fails with the list of conflicted
-files and AI handoff prompts under `.git/fuse/` — pipe those into
-`fuse resolve --agent` from a follow-up step if you want full automation.
+files and AI handoff prompts under `.git/fuse/`. For the fully automated
+path, add a follow-up step that hands each prompt to an agent, applies the
+validated resolution, and pushes:
+
+```yaml
+      - uses: provasign/fuse@main
+        id: fuse
+        continue-on-error: true
+        with:
+          push: 'true'
+      - name: AI-resolve remaining conflicts
+        if: steps.fuse.outputs.resolved == 'false'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          for prompt in .git/fuse/conflict-*.md; do
+            [ -e "$prompt" ] || continue
+            fuse resolve "$prompt" --agent "claude -p" --apply
+          done
+          git add -A
+          git -c user.name=fuse-bot -c user.email=bot@users.noreply.github.com             commit -m "fuse: AI-resolved merge conflicts"
+          git push
+```
+
+Every agent resolution passes the same validation gate as local resolves —
+non-empty, no conflict markers, parses — before it is written.
 
 ---
 

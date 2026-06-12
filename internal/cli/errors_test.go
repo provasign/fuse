@@ -22,3 +22,19 @@ func TestRunLineMerge_FromUnsupportedLang(t *testing.T) {
 		t.Errorf("got %d", code)
 	}
 }
+
+func TestShellFlag(t *testing.T) {
+	cases := map[string]string{
+		"/bin/sh":                        "-c",
+		"/bin/zsh":                       "-c",
+		`C:\Windows\System32\cmd.exe`:    "/C",
+		"cmd":                            "/C",
+		"powershell.exe":                 "-Command",
+		`C:\Program Files\pwsh\pwsh.exe`: "-Command",
+	}
+	for shell, want := range cases {
+		if got := shellFlag(shell); got != want {
+			t.Errorf("shellFlag(%q) = %q, want %q", shell, got, want)
+		}
+	}
+}
