@@ -27,3 +27,23 @@ vendor/
 
 # OS
 .DS_Store
+
+# Locally generated agent/steering configs (prism init, provasign init) —
+# per-machine dev environment, not product source.
+/.amp/
+/.clinerules
+/.cursor/
+/.cursorrules
+/.devin/
+/.gitattributes
+/.github/copilot-instructions.md
+/.grove/
+/.kiro/
+/.mcp.json
+/.provasign/
+/.windsurfrules
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/prism.yaml
+internal/cli/.grove/
