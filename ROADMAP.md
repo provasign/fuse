@@ -60,7 +60,7 @@ plan beyond the checklists below.
 
 - [x] GitHub Action: server-side conflict resolution for agent PR branches (shipped in v0.5.0)
 - [ ] `fuse mcp`: stdio MCP server — fuse_merge_check, fuse_preview, fuse_resolve, fuse_impact (see NEXT_STEPS.md §3)
-- [ ] Homebrew: join the family tap — `brew install provasign/shale/fuse`
+- [ ] Homebrew: join the family tap — `brew install provasign/tap/fuse`
 - [ ] Benchmark corpus expansion: TS/Python-heavy repos, publish per-language results in README
 
 ## v1.0.0 — Production Hardening
